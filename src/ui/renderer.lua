@@ -163,6 +163,41 @@ function renderer.new(args)
     ass:draw_stop()
   end
 
+  function service:draw_connected_pill_segment(ass, join_x, y1, x2, y2,
+      color, alpha)
+    if x2 <= join_x or y2 <= y1 then return end
+    local height = y2 - y1
+    local radius = height / 2
+    local x1 = join_x - radius
+    local width = x2 - x1
+    local outer_radius = math.min(radius, width / 2)
+    local kappa = 0.5522847498
+    ass:new_event(); ass:pos(x1, y1); ass:an(7)
+    ass:append(string.format("{\\1c&H%s&\\1a&H%s&\\bord0\\shad0}",
+      self:ass_color(color), self:fade_alpha(alpha)))
+    append_clip(ass)
+    ass:draw_start()
+    ass:move_to(0, 0)
+    ass:line_to(width - outer_radius, 0)
+    ass:bezier_curve(
+      width - outer_radius + outer_radius * kappa, 0,
+      width, outer_radius - outer_radius * kappa,
+      width, outer_radius)
+    ass:line_to(width, height - outer_radius)
+    ass:bezier_curve(
+      width, height - outer_radius + outer_radius * kappa,
+      width - outer_radius + outer_radius * kappa, height,
+      width - outer_radius, height)
+    ass:line_to(0, height)
+    -- Trace the primary pill's right semicircle in reverse to make a
+    -- concave, perfectly matching inner joint.
+    ass:bezier_curve(radius * kappa, height,
+      radius, radius + radius * kappa, radius, radius)
+    ass:bezier_curve(radius, radius - radius * kappa,
+      radius * kappa, 0, 0, 0)
+    ass:draw_stop()
+  end
+
   function service:draw_rect(ass, x1, y1, x2, y2, color, alpha)
     if x2 <= x1 or y2 <= y1 then return end
     self:draw_box(ass, x1, y1, x2, y2,

@@ -63,7 +63,7 @@ function edge_seek.new(services)
     local pill_y = cy + dp(48)
     ui.draw_box(ass, cx - pill_w / 2, pill_y,
       cx + pill_w / 2, pill_y + pill_h, pill_h / 2,
-      "#050708", ui.alpha(opacity * 0.82), true)
+      "#050708", ui.alpha(opacity * 0.90), true)
     ui.draw_text(ass, cx, pill_y + pill_h / 2, label, 22,
       "#FFFFFF", alpha, ui.default_text_font, nil, nil, true)
   end

@@ -26,7 +26,7 @@ function media_information_close.new(services)
 
   function node.button:draw(ass, bounds)
     ui.draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
-      bounds.h / 2, "#050708", ui.alpha(0.84), true)
+      bounds.h / 2, "#050708", ui.alpha(0.92), true)
     if ui.mouse_in(bounds) then
       ui.draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
         bounds.h / 2, "#FFFFFF", ui.alpha(0.16), true)

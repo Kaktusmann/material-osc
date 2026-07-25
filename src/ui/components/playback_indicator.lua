@@ -109,7 +109,7 @@ function playback_indicator.new(args)
       local x1, x2 = cx - pill_w / 2, cx + pill_w / 2
       local y1, y2 = cy - pill_h / 2, cy + pill_h / 2
       ui.draw_box(ass, x1, y1, x2, y2, pill_h / 2,
-        "#050708", ui.alpha(opacity * 0.84), true)
+        "#050708", ui.alpha(opacity * 0.92), true)
       local icon_x = x1 + horizontal_padding + icon_size / 2
       ui.draw_icon(ass, icon_x, cy, state.icon, "#FFFFFF", 26 * scale,
         ui.alpha(opacity), true)
@@ -131,7 +131,7 @@ function playback_indicator.new(args)
       local pill_y = cy + size / 2 + dp(12) * scale
       ui.draw_box(ass, cx - pill_w / 2, pill_y,
         cx + pill_w / 2, pill_y + pill_h, pill_h / 2,
-        "#050708", ui.alpha(opacity * 0.72), true)
+        "#050708", ui.alpha(opacity * 0.82), true)
       ui.draw_text(ass, cx, pill_y + pill_h / 2, state.label, 28 * scale,
         state.label_color, ui.alpha(opacity), ui.default_text_font,
         nil, nil, true)

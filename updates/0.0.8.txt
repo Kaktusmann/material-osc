@@ -1,0 +1,12 @@
+- Added keyboard navigation throughout menus and popups, including directional movement, activation, paging, and scrolling through long lists.
+- Tooltips now show the active keyboard shortcut in a single readable keycap and render correctly above popup content.
+- Fixed pointer and click input passing through open popups to controls or previous pages underneath.
+- Redesigned Playback Speed with a stepped slider, inline decrease and increase controls, shortcut hints, and reliable back navigation.
+- Added a configurable temporary-speed action with a header control and a compact on-screen speed indicator.
+- Moved Crop into the main Settings page and improved navigation between Video, Subtitle, Crop, and Playback Speed pages.
+- Added a connected cached-time segment beside the playback time, showing only buffered media ahead of the current position.
+- Subtitles now follow control-bar visibility with a smooth spring animation instead of snapping between positions.
+- Improved Playlist controls with shuffle and repeat tooltips, refined icon sizing, and clearer collapse behavior.
+- Refined control-pill opacity and spacing, window-control padding, and the close button's hover appearance.
+- Added live-reloadable `force_display_resample` and `force_force_window` options, replacing the previous manual `mpv.conf` recommendations.
+- Improved configuration and installation documentation, including a collapsible option reference.

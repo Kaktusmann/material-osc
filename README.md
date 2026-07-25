@@ -16,7 +16,8 @@ https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 material-osc can be customized with a `material-osc.conf` file in mpv's
 `script-opts` directory. You can also open file from **Right-click → Configurations**.
 
-### Option reference
+<details>
+<summary>Show Options</summary>
 
 | Option | Default | Accepted values | Description |
 | --- | --- | --- | --- |
@@ -33,24 +34,20 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
 | `youtube_quality` | `auto` | `auto` or a vertical resolution such as `1080` | Sets the maximum quality used when initially loading YouTube videos. `auto` preserves mpv's configured `ytdl-format`. |
 | `force_hwdec` | `yes` | `yes`, `no` | Enables mpv's safe automatic hardware decoding. With `no`, material-osc preserves the configured `hwdec` value. |
+| `force_display_resample` | `yes` | `yes`, `no` | Uses `video-sync=display-resample` for smoother UI motion. With `no`, material-osc preserves the configured `video-sync` value. |
+| `force_force_window` | `yes` | `yes`, `no` | Keeps an mpv window open even before a file is loaded. With `no`, material-osc preserves the configured `force-window` value. |
 | `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. |
+| `temporary_speed` | `2` | Playback rate greater than `0` | Sets the speed used while the `hold-double-speed` binding is held. |
 | `directory_playlist` | `yes` | `yes`, `no` | Adds nearby video and audio files when opening a local file, unless a multi-item playlist already exists. |
 | `directory_playlist_sort` | `name` | `name`, `newest`, `oldest` | Selects how automatically discovered directory entries are ordered. |
+
+</details>
 
 ### Window controls
 
 With `window_controls=auto`, material-osc provides minimize, maximize/restore, and
 close buttons when mpv runs without native window decorations (`border=no` in
 `mpv.conf`) or enters fullscreen.
-
-## Recommended mpv configuration
-
-For a smoother UI, add the following options to your `mpv.conf`:
-
-```conf
-video-sync=display-resample
-force-window=yes
-```
 
 The script disables automatic window resizing and starts the window at 66% of
 the screen height. Its width is calculated from the video's aspect ratio.

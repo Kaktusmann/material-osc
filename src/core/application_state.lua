@@ -35,8 +35,13 @@ function application_state.new(args)
       tag = nil, notes = nil, error = nil, asset_url = nil,
       scroll_index = 0, disable_auto_update = false, last_check = 0
     },
-    input = {hitboxes = {}, order = {}, next_id = 0},
+    input = {
+      hitboxes = {}, order = {}, next_id = 0,
+      keyboard_focus = nil, keyboard_scope = nil,
+      drawing_keyboard_focus = false, keyboard_generation = 0
+    },
     time = {show_remaining = false},
+    temporary_speed = {active = false, previous = nil},
     seek = {dragging = false, position = nil, offset_x = 0},
     wheel = {kind = nil, amount = 0, timer = nil},
     edge_seek = {

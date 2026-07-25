@@ -28,6 +28,7 @@ function controls.new(services)
   local content_bounds = ui.content_bounds
   local draw_node, IconButton, TextItem = ui.draw_node, ui.IconButton, ui.TextItem
   local Visibility, Row, Pill = ui.Visibility, ui.Row, ui.Pill
+  local ConnectedPill = ui.ConnectedPill
   local is_render_pass = ui.is_render_pass
 
   local function VolumeSlider()
@@ -129,18 +130,33 @@ function controls.new(services)
 
   local function VolumeControl()
     local node = {modifier = Modifier():drawBehindInteraction(false)}
+    node.guard = {
+      modifier = Modifier():pointerArea({
+        name = "volume-popup-guard",
+        enabled = false,
+        on_click = function() end,
+        on_scroll_up = function() mp.commandv("add", "volume", "5") end,
+        on_scroll_down = function() mp.commandv("add", "volume", "-5") end
+      })
+    }
+    function node.guard:measure(parent)
+      return apply_modifier_size(self.modifier, {w = parent.w, h = parent.h}, parent)
+    end
+    function node.guard:draw() end
     node.button = IconButton({
       name = "volume-button",
       icon = "volume_up",
       render_pass = "dynamic",
       tooltip = "Mute",
+      shortcut_before = {"volume-down", "volume-up"},
+      shortcut = "mute",
       on_click = function() mp.commandv("cycle", "mute") end,
       on_scroll_up = function()
-        volume_state.tooltip_suppressed_until = mp.get_time() + tooltip_delay
+        volume_state.tooltip_suppressed_until = mp.get_time() + tooltip_delay()
         mp.commandv("add", "volume", "5")
       end,
       on_scroll_down = function()
-        volume_state.tooltip_suppressed_until = mp.get_time() + tooltip_delay
+        volume_state.tooltip_suppressed_until = mp.get_time() + tooltip_delay()
         mp.commandv("add", "volume", "-5")
       end
     })
@@ -150,7 +166,7 @@ function controls.new(services)
     function node:update(snapshot)
       local tooltip = nil
       if mp.get_time() >= volume_state.tooltip_suppressed_until then
-        tooltip = snapshot.muted and "Unmute" or "Mute"
+        tooltip = ""
       end
       self.button:update({
         icon = snapshot.muted and "volume_off" or "volume_up",
@@ -188,8 +204,9 @@ function controls.new(services)
         h = popup_y2 - lerp(collapsed_y1, expanded_y1, visual_progress)
       })
       volume_state.popup_bounds = popup
+      self.guard.modifier.pointer_enabled = visual_progress > 0.2
 
-      local popup_alpha = mouse_in(popup) and "00" or "78"
+      local popup_alpha = mouse_in(popup) and "00" or "58"
       draw_box(ass, popup.x1, popup.y1, popup.x2, popup.y2,
            popup.w / 2, "#050708", popup_alpha)
 
@@ -200,6 +217,12 @@ function controls.new(services)
         h = math.max(0, bounds.y - popup.y)
       })
       if slider_bounds.h > 0 then draw_node(self.slider, ass, slider_bounds) end
+      local guard_height = math.max(0, popup.y2 - bounds.y2)
+      if guard_height > 0 then
+        draw_node(self.guard, ass, Rect({
+          x = popup.x, y = bounds.y2, w = popup.w, h = guard_height
+        }))
+      end
       draw_node(self.button, ass, bounds)
     end
 
@@ -267,12 +290,17 @@ function controls.new(services)
   local function ControlsRow()
     local node = {modifier = Modifier():fillMaxWidth()}
     node.play = IconButton({name = "play-button", icon = "pause", tooltip = "Pause",
+      shortcut = "pause",
       on_click = function() mp.commandv("cycle", "pause") end})
     node.volume = VolumeControl()
     node.time = TextItem({
       text = "0:00 / 0:00",
       render_pass = "dynamic",
-      modifier = Modifier():clickable({
+      tooltip = "Toggle Remaining",
+      modifier = Modifier():padding({
+        horizontal = dp(10),
+        vertical = dp(4)
+      }):clickable({
         name = "time-display",
         on_click = function()
           time_state.show_remaining = not time_state.show_remaining
@@ -319,17 +347,72 @@ function controls.new(services)
               text_width(snapshot.time_text, node.time.size))
     end
 
+    local function cached_duration(snapshot)
+      local duration = math.max(0, tonumber(snapshot.duration) or 0)
+      if not snapshot.network or duration <= 0 then return nil end
+      local position = clamp(
+        tonumber(snapshot.position) or 0, 0, duration)
+      local ranges = (snapshot.cache_state or {})["seekable-ranges"] or {}
+      local intervals = {}
+      for _, range in ipairs(ranges) do
+        local range_start = clamp(
+          math.max(tonumber(range["start"]) or 0, position), 0, duration)
+        local range_end = clamp(tonumber(range["end"]) or 0, 0, duration)
+        if range_end > range_start then
+          intervals[#intervals + 1] = {range_start, range_end}
+        end
+      end
+      table.sort(intervals, function(a, b) return a[1] < b[1] end)
+      local total, merged_start, merged_end = 0, nil, nil
+      for _, interval in ipairs(intervals) do
+        if not merged_start then
+          merged_start, merged_end = interval[1], interval[2]
+        elseif interval[1] <= merged_end then
+          merged_end = math.max(merged_end, interval[2])
+        else
+          total = total + merged_end - merged_start
+          merged_start, merged_end = interval[1], interval[2]
+        end
+      end
+      if merged_start then total = total + merged_end - merged_start end
+      return total
+    end
+
+    node.cached_time = TextItem({
+      text = "0:00",
+      render_pass = "dynamic",
+      tooltip = "Cached Time",
+      modifier = Modifier():padding({
+        starting = dp(4),
+        ending = dp(8),
+        vertical = dp(4)
+      }):pointerArea({
+        name = "cached-time",
+        keyboard = false
+      })
+    })
+    node.cached = Visibility({
+      visible = false,
+      child = node.cached_time
+    })
+    node.time_cache = ConnectedPill({
+      primary = node.time,
+      secondary = node.cached
+    })
+
     node.starting = Row({
       gap = dp(8),
       modifier = Modifier():align({horizontal = "starting", vertical = "center"}),
       children = {
         Pill({children = {node.play}}),
         Pill({no_background = true, children = {node.volume}}),
-        Pill({children = {node.time}}),
+        node.time_cache,
         node.chapter
       }
     })
-    node.subtitles = IconButton({name = "subtitles-button", icon = "subtitles", tooltip = "Subtitles",
+    node.subtitles = IconButton({name = "subtitles-button", icon = "subtitles",
+      tooltip = "Subtitles",
+      shortcut = "subtitles",
       on_click = toggle_subtitles,
       on_scroll_up = function() cycle_subtitle(-1) end,
       on_scroll_down = function() cycle_subtitle(1) end})
@@ -338,16 +421,23 @@ function controls.new(services)
       child = node.subtitles
     })
     node.screenshot = IconButton({name = "screenshot-button", icon = "photo_camera",
-      tooltip = "Take screenshot",
+      tooltip = "Take Screenshot",
+      shortcut = "screenshot",
       on_click = function() mp.commandv("screenshot", "subtitles") end})
-    node.settings = IconButton({name = "settings-button", icon = "settings", tooltip = "Settings",
+    node.settings = IconButton({name = "settings-button", icon = "settings",
+      tooltip = "Settings",
+      shortcut = "open-settings",
       on_click = function()
         set_settings_dialog_open(not settings_state.open)
       end})
-    node.fullscreen = IconButton({name = "fullscreen-button", icon = "open_in_full", tooltip = "Fullscreen",
+    node.fullscreen = IconButton({name = "fullscreen-button",
+      icon = "open_in_full", tooltip = "Fullscreen",
+      shortcut = "fullscreen",
       on_click = function() mp.commandv("cycle", "fullscreen") end})
     node.ending = Pill({
-      children = {node.subtitles_visibility, node.screenshot, node.settings, node.fullscreen},
+      children = {
+        node.subtitles_visibility, node.screenshot, node.settings, node.fullscreen
+      },
       modifier = Modifier():align({horizontal = "ending", vertical = "center"})
     })
 
@@ -366,9 +456,16 @@ function controls.new(services)
       end
       if static_changed or self.last_duration ~= snapshot.duration then
         self.time.modifier.fixed_width = stable_time_width(snapshot)
+        local duration_text = format_time(snapshot.duration or 0)
+        self.cached_time.modifier.fixed_width =
+          text_width(duration_text:gsub("%d", widest_digit),
+            self.cached_time.size)
         self.last_duration = snapshot.duration
       end
       self.time:update({text = snapshot.time_text})
+      local cached = cached_duration(snapshot)
+      self.cached:set_visible(cached ~= nil)
+      self.cached_time:update({text = format_time(cached or 0)})
       if static_changed then
         self.chapter_text:update({text = snapshot.chapter_name or ""})
         self.chapter:set_visible(snapshot.chapter_name ~= nil)
@@ -376,11 +473,11 @@ function controls.new(services)
         self.subtitles_visibility:set_visible(#snapshot.subtitle_items > 1)
         self.subtitles:update({
           icon = subtitles_on and "subtitles" or "subtitles_off",
-          tooltip = subtitles_on and "Hide subtitles" or "Show subtitles"
+          tooltip = subtitles_on and "Hide Subtitles" or "Show Subtitles"
         })
         self.fullscreen:update({
           icon = snapshot.fullscreen and "close_fullscreen" or "open_in_full",
-          tooltip = snapshot.fullscreen and "Exit fullscreen" or "Fullscreen"
+          tooltip = snapshot.fullscreen and "Exit Fullscreen" or "Fullscreen"
         })
       end
     end
@@ -402,6 +499,13 @@ function controls.new(services)
     function node:draw_dynamic(ass)
       if self.volume.bounds then self.volume:draw(ass, self.volume.bounds) end
       if self.time.bounds then self.time:draw(ass, self.time.bounds) end
+      if self.cached.visible and self.cached_time.bounds then
+        self.cached_time:draw(ass, self.cached_time.bounds)
+      end
+    end
+
+    function node:draw_volume_interaction(ass)
+      if self.volume.bounds then self.volume:draw(ass, self.volume.bounds) end
     end
 
     return node
@@ -415,12 +519,12 @@ function controls.new(services)
     }
     node.minimize = IconButton({
       name = "window-minimize-button", icon = "minimize", size = 22,
-      tooltip = "Minimize",
+      horizontal_padding = 6, tooltip = "Minimize",
       on_click = function() mp.set_property_bool("window-minimized", true) end
     })
     node.maximize = IconButton({
       name = "window-maximize-button", icon = "crop_square", size = 22,
-      icon_size = 18,
+      icon_size = 18, horizontal_padding = 6,
       tooltip = "Maximize",
       on_click = function()
         if node.fullscreen then mp.set_property_bool("fullscreen", false)
@@ -429,12 +533,13 @@ function controls.new(services)
     })
     node.close = IconButton({
       name = "window-close-button", icon = "close", size = 22,
-      tooltip = "Close",
+      horizontal_padding = 6, hover_icon_color = "#000000", tooltip = "Close",
       on_click = function() mp.commandv("quit") end
     })
-    node.close.modifier.hover_color = "#E81123"
+    node.close.modifier.hover_color = "#FF5263"
     node.close.modifier.hover_alpha = "40"
     node.pill = Pill({
+      gap = 0,
       children = {node.minimize, node.maximize, node.close}
     })
 
@@ -443,7 +548,7 @@ function controls.new(services)
       local restored = snapshot.fullscreen or snapshot.window_maximized
       self.maximize:update({
         icon = restored and "filter_none" or "crop_square",
-        tooltip = snapshot.fullscreen and "Exit fullscreen" or
+        tooltip = snapshot.fullscreen and "Exit Fullscreen" or
           (snapshot.window_maximized and "Restore" or "Maximize")
       })
     end
@@ -485,8 +590,9 @@ function controls.new(services)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
     end
     function node:draw(ass)
-      if self.suppressed and not tooltip_state.allow_when_suppressed then return end
       local visual = tooltip_state.visual
+      if self.suppressed and
+          not (visual and visual.allow_when_suppressed) then return end
       local opacity = tooltip_state.opacity.value
       if visual and opacity > 0 then
         local alpha = ass_alpha_for_opacity(opacity)
@@ -495,9 +601,18 @@ function controls.new(services)
         local y1 = visual.y1 + slide_y
         draw_box(ass, visual.x1, y1, visual.x2, y1 + visual.h,
              visual.h / 2, "#E8E8E8", alpha)
-        draw_text(ass, visual.x1 + visual.w / 2, y1 + visual.h / 2,
+        draw_text(ass, visual.text_x or (visual.x1 + visual.w / 2),
+              y1 + visual.h / 2,
               visual.text, visual.text_size, "#202020", alpha,
               default_text_font)
+        for _, keycap in ipairs(visual.keycaps or {}) do
+          local cap_y1, cap_y2 = y1 + dp(4), y1 + visual.h - dp(4)
+          draw_box(ass, keycap.x1, cap_y1, keycap.x1 + keycap.w, cap_y2,
+            dp(5), "#C8C8C8", alpha)
+          draw_text(ass, keycap.x1 + keycap.w / 2,
+            y1 + visual.h / 2, keycap.label, visual.key_size,
+            "#202020", alpha, default_text_font)
+        end
       end
     end
     return node

@@ -69,7 +69,7 @@ function thumbnail.new(deps)
     local pill_text_size = 22
     local pill_vertical_padding = dp(4)
     local pill_horizontal_padding = dp(8)
-    local pill_background_alpha = "48"
+    local pill_background_alpha = "33"
     local thumb_w = has_thumbnail and state.width or 0
     local thumb_h = has_thumbnail and state.height or 0
     local pill_h = dp(pill_text_size) + pill_vertical_padding * 2

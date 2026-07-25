@@ -17,6 +17,7 @@ function compose.new(deps)
   local dp = deps.dp
   local mouse_in = deps.mouse_in
   local draw_box = deps.draw_box
+  local draw_connected_pill_segment = deps.draw_connected_pill_segment
   local draw_icon = deps.draw_icon
   local draw_text = deps.draw_text
   local text_intrinsic_width = deps.text_intrinsic_width
@@ -123,6 +124,12 @@ function compose.new(deps)
       self.pointer_scroll_up_action = args.on_scroll_up
       self.pointer_scroll_down_action = args.on_scroll_down
       self.pointer_enabled = args.enabled ~= false
+      self.keyboard_enabled = args.keyboard ~= false
+      self.keyboard_action = args.on_keyboard or args.on_click
+      self.keyboard_left_action = args.on_keyboard_left
+      self.keyboard_right_action = args.on_keyboard_right
+      self.keyboard_up_action = args.on_keyboard_up
+      self.keyboard_down_action = args.on_keyboard_down
       return self
     end
 
@@ -139,6 +146,12 @@ function compose.new(deps)
       self.pointer_enabled = args.enabled ~= false
       self.pointer_extend_x = args.extend_x or 0
       self.pointer_extend_y = args.extend_y or 0
+      self.keyboard_enabled = args.keyboard ~= false
+      self.keyboard_action = args.on_keyboard
+      self.keyboard_left_action = args.on_keyboard_left
+      self.keyboard_right_action = args.on_keyboard_right
+      self.keyboard_up_action = args.on_keyboard_up
+      self.keyboard_down_action = args.on_keyboard_down
       return self
     end
 
@@ -248,6 +261,7 @@ function compose.new(deps)
       render_pass == (modifier.render_pass or default_render_pass) then
       pointer.name = modifier.pointer_name
       pointer.enabled = modifier.pointer_enabled
+      pointer.render_pass = render_pass
       if not runtime.input.hitboxes[modifier.pointer_name] then
         runtime.input.order[#runtime.input.order + 1] = modifier.pointer_name
       end
@@ -259,12 +273,21 @@ function compose.new(deps)
       pointer.on_double = modifier.pointer_double_action
       pointer.on_scroll_up = modifier.pointer_scroll_up_action
       pointer.on_scroll_down = modifier.pointer_scroll_down_action
+      pointer.keyboard_enabled = modifier.keyboard_enabled
+      pointer.keyboard_action = modifier.keyboard_action
+      pointer.keyboard_left = modifier.keyboard_left_action
+      pointer.keyboard_right = modifier.keyboard_right_action
+      pointer.keyboard_up = modifier.keyboard_up_action
+      pointer.keyboard_down = modifier.keyboard_down_action
+      pointer.keyboard_generation = runtime.input.keyboard_generation
     end
 
     local draws_hover = render_pass == "interaction" or render_pass == "modal"
     if draws_hover and modifier.hover_indication and
       modifier.pointer_enabled ~= false and
-      mouse_in(pointer) then
+      (mouse_in(pointer) or
+        (runtime.input.drawing_keyboard_focus and
+          runtime.input.keyboard_focus == modifier.pointer_name)) then
       local inset = modifier.hover_inset or 0
       draw_box(ass, bounds.x + inset, bounds.y + inset, bounds.x2 - inset,
            bounds.y2 - inset, (bounds.h - inset * 2) / 2,
@@ -286,9 +309,15 @@ function compose.new(deps)
   local function IconButton(args)
     local node = {
       icon = args.icon,
+      icon_color = args.icon_color or "#FFFFFF",
+      hover_icon_color = args.hover_icon_color,
       transition_icon = args.transition_icon,
       transition_progress = args.transition_progress or 0,
       tooltip = args.tooltip,
+      tooltip_allow_when_suppressed =
+        args.tooltip_allow_when_suppressed == true,
+      shortcut = args.shortcut,
+      shortcut_before = args.shortcut_before,
       size = args.size or icon_text_size,
       icon_size = args.icon_size or args.size or icon_text_size,
       alpha = args.alpha,
@@ -299,7 +328,10 @@ function compose.new(deps)
       on_scroll_down = args.on_scroll_down
     }
 
-    node.modifier = args.modifier or Modifier():padding({all = dp(2)}):clickable({
+    node.modifier = args.modifier or Modifier():padding({
+      horizontal = dp(args.horizontal_padding or 2),
+      vertical = dp(args.vertical_padding or 2)
+    }):clickable({
       name = args.name,
       enabled = node.enabled,
       on_click = function()
@@ -336,7 +368,14 @@ function compose.new(deps)
     end
 
     function node:draw(ass, bounds)
-      if is_render_pass(self.render_pass) then
+      local hovered = mouse_in(bounds) or
+        (runtime.input.drawing_keyboard_focus and
+          runtime.input.keyboard_focus == self.modifier.pointer_name)
+      local draws_hover_icon = self.hover_icon_color and hovered and
+        (render_pass == "interaction" or render_pass == "modal")
+      if is_render_pass(self.render_pass) or draws_hover_icon then
+        local icon_color =
+          draws_hover_icon and self.hover_icon_color or self.icon_color
         local icon_alpha = self.alpha
         if not self.enabled then
           local transition_alpha = tonumber(icon_alpha or "00", 16) or 0
@@ -352,17 +391,19 @@ function compose.new(deps)
             return string.format("%02X",
               math.floor(255 - 255 * opacity * fraction + 0.5))
           end
-          draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
+          draw_icon(ass, center_x, center_y, self.icon, icon_color, self.icon_size,
             faded_alpha(1 - progress))
-          draw_icon(ass, center_x, center_y, self.transition_icon, "#FFFFFF",
+          draw_icon(ass, center_x, center_y, self.transition_icon, icon_color,
             self.icon_size, faded_alpha(progress))
         else
-          draw_icon(ass, center_x, center_y, self.icon, "#FFFFFF", self.icon_size,
+          draw_icon(ass, center_x, center_y, self.icon, icon_color, self.icon_size,
             icon_alpha)
         end
       end
       if self.tooltip and self.enabled and mouse_in(bounds) then
-        request_tooltip(self.tooltip, bounds)
+        request_tooltip(self.tooltip, bounds,
+          self.tooltip_allow_when_suppressed, self.shortcut,
+          self.shortcut_before)
       end
     end
 
@@ -375,6 +416,7 @@ function compose.new(deps)
       size = args.size or normal_text_size,
       color = args.color or "#FFFFFF",
       alpha = args.alpha,
+      tooltip = args.tooltip,
       alignment = args.alignment,
       render_pass = args.render_pass,
       modifier = args.modifier or Modifier()
@@ -395,10 +437,16 @@ function compose.new(deps)
 
     function node:draw(ass, bounds)
       self.bounds = bounds
-      if not is_render_pass(self.render_pass) then return end
-      draw_text(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
+      if is_render_pass(self.render_pass) then
+        local content = content_bounds(bounds, self.modifier)
+        draw_text(ass, content.x + content.w / 2,
+            content.y + content.h / 2,
             self.text, self.size, self.color, self.alpha,
             default_text_font, self.alignment)
+      end
+      if self.tooltip and mouse_in(bounds) then
+        request_tooltip(self.tooltip, bounds)
+      end
     end
 
     return node
@@ -518,7 +566,7 @@ function compose.new(deps)
   local function Pill(args)
     local child = Row({
       children = args.children,
-      gap = dp(4),
+      gap = args.gap == nil and dp(4) or args.gap,
       modifier = Modifier():padding({
         horizontal = dp(args.horizontal_padding or 4),
         vertical = dp(4)
@@ -527,13 +575,17 @@ function compose.new(deps)
     local modifier = args.modifier or Modifier()
     if not args.no_background and not modifier.background_color then
       modifier:background({
-        color = "#050708",
-        alpha = "78",
+        color = args.background_color or "#050708",
+        alpha = args.background_alpha or "58",
         shape = RoundedCornerShape({percent = 50})
       })
     end
 
-    local node = {child = child, modifier = modifier:drawBehindInteraction(false)}
+    local node = {
+      child = child,
+      tooltip = args.tooltip,
+      modifier = modifier:drawBehindInteraction(false)
+    }
 
     function node:measure(parent)
       return apply_modifier_size(self.modifier, measure_node(self.child, parent), parent)
@@ -541,6 +593,67 @@ function compose.new(deps)
 
     function node:draw(ass, bounds)
       self.child:draw(ass, content_bounds(bounds, self.modifier))
+      if self.tooltip and mouse_in(bounds) then
+        request_tooltip(self.tooltip, bounds)
+      end
+    end
+
+    return node
+  end
+
+  local function ConnectedPill(args)
+    local node = {
+      primary = args.primary,
+      secondary = args.secondary,
+      primary_color = args.primary_color or "#050708",
+      primary_alpha = args.primary_alpha or "58",
+      secondary_color = args.secondary_color or "#b1b1b1",
+      secondary_alpha = args.secondary_alpha or "66",
+      modifier = args.modifier or Modifier():drawBehindInteraction(false)
+    }
+
+    function node:measure(parent)
+      local primary = measure_node(self.primary, parent)
+      local secondary = measure_node(self.secondary, parent)
+      return apply_modifier_size(self.modifier, {
+        w = primary.w + secondary.w,
+        h = math.max(primary.h, secondary.h)
+      }, parent)
+    end
+
+    function node:draw(ass, bounds)
+      local content = content_bounds(bounds, self.modifier)
+      local primary = measure_node(self.primary, content)
+      local secondary = measure_node(self.secondary, content)
+      local height = math.max(primary.h, secondary.h)
+      local y = content.y + (content.h - height) / 2
+      local primary_bounds = Rect({
+        x = content.x,
+        y = y + (height - primary.h) / 2,
+        w = primary.w,
+        h = primary.h
+      })
+      local secondary_bounds = Rect({
+        x = primary_bounds.x2,
+        y = y + (height - secondary.h) / 2,
+        w = secondary.w,
+        h = secondary.h
+      })
+
+      if is_render_pass(self.modifier.render_pass) then
+        if secondary.w > 0 then
+          draw_connected_pill_segment(ass, primary_bounds.x2, y,
+            primary_bounds.x2 + secondary.w, y + height,
+            self.secondary_color, self.secondary_alpha)
+        end
+        draw_box(ass, primary_bounds.x, y, primary_bounds.x2,
+          y + height, height / 2, self.primary_color, self.primary_alpha)
+      end
+
+      draw_node(self.primary, ass, primary_bounds)
+      if secondary.w > 0 then
+        draw_node(self.secondary, ass, secondary_bounds)
+      end
     end
 
     return node
@@ -566,7 +679,8 @@ function compose.new(deps)
     Visibility = Visibility,
     Row = Row,
     Column = Column,
-    Pill = Pill
+    Pill = Pill,
+    ConnectedPill = ConnectedPill
   }
 end
 

@@ -62,7 +62,7 @@ function controller.new(args)
       end
       runtime.controller.hide_deadline = nil
       self:update_mouse()
-      if self:interaction_requires_visibility() then
+      if self:should_show_at_pointer() then
         self:show()
       else
         self:animate_visibility(false)
@@ -83,7 +83,8 @@ function controller.new(args)
 
   function service:interaction_requires_visibility()
     if runtime.update.open then return true end
-    if runtime.seek.dragging or runtime.volume.dragging then
+    if runtime.seek.dragging or runtime.volume.dragging or
+      runtime.pointer.window_dragging then
       return true
     end
     for _, name in ipairs(args.navigation.dialogs) do
@@ -114,6 +115,9 @@ function controller.new(args)
     local name, box = args.hitbox_at_cursor()
     local hover_changed = runtime.pointer.hover_hitbox ~= name
     runtime.pointer.hover_hitbox = name
+    if hover_changed and args.tooltip_hover_changed then
+      args.tooltip_hover_changed(name)
+    end
 
     local seek_x = nil
     if name == "seekbar" and box then
@@ -162,6 +166,7 @@ function controller.new(args)
   end
 
   function service:on_mouse_move()
+    runtime.input.keyboard_focus, runtime.input.keyboard_scope = nil, nil
     self:update_mouse()
     local interval = args.pointer_interval and args.pointer_interval() or
       runtime.timers.frame_interval or (1 / 60)

@@ -186,7 +186,10 @@ function context_actions.new(args)
       "window_controls",
       "youtube_quality",
       "force_hwdec",
+      "force_display_resample",
+      "force_force_window",
       "max_volume_percentage",
+      "temporary_speed",
       "directory_playlist",
       "directory_playlist_sort"
     }

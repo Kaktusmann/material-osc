@@ -1,7 +1,7 @@
 # Installation
 
 1. Download `material-osc.zip` and
-   [`thumbfast.lua`](https://github.com/po5/thumbfast).
+   [`thumbfast.lua`](https://github.com/po5/thumbfast/raw/refs/heads/master/thumbfast.lua).
 2. Unzip `material-osc.zip` into your mpv configuration directory, then place
    `thumbfast.lua` beside `material-osc.lua` in the `scripts` directory.
 
@@ -14,7 +14,6 @@ The resulting layout should look like this:
 
 ```text
 📁 mpv
-├── mpv.conf (optional)
 ├── 📁 fonts
 │   ├── material-osc_icons.otf
 │   └── material-osc_google_sans_flex.ttf
@@ -24,11 +23,4 @@ The resulting layout should look like this:
 └── 📁 script-opts (optional)
     ├── material-osc.conf
     └── thumbfast.conf
-```
-
-For smoother experience, add this to `mpv.conf`:
-
-```conf
-video-sync=display-resample
-force-window=yes
 ```

@@ -701,6 +701,7 @@ end
 function popups.new(services)
   local state, ui = services.state, services.ui
   local player, navigation = services.player, services.navigation
+  local temporary_speed = services.temporary_speed
   local pointer, input, viewport = state.pointer, state.input, state.viewport
   local chapter_state, subtitle_state = state.chapter, state.subtitle
   local audio_state, settings_state, ytdl_state = state.audio, state.settings, state.ytdl
@@ -848,13 +849,29 @@ function popups.new(services)
       on_click = args.on_click,
       icon = args.icon or "close",
       tooltip = args.tooltip or (args.icon == "arrow_back" and "Back" or "Close"),
+      shortcut = args.shortcut,
       modifier = Modifier():width(dp(36)):height(dp(36))
     }
-    node.modifier:clickable({
-      name = args.name or "chapter-dialog-close",
-      enabled = false,
-      on_click = function() if node.enabled and node.on_click then node.on_click() end end
-    })
+    if args.on_press or args.on_release then
+      node.modifier:pointerArea({
+        name = args.name or "chapter-dialog-close",
+        enabled = false,
+        on_press = function()
+          if node.enabled and args.on_press then args.on_press() end
+        end,
+        on_release = function()
+          if args.on_release then args.on_release() end
+        end
+      })
+    else
+      node.modifier:clickable({
+        name = args.name or "chapter-dialog-close",
+        enabled = false,
+        on_click = function()
+          if node.enabled and node.on_click then node.on_click() end
+        end
+      })
+    end
     function node:update(props)
       self.alpha = props.alpha
       self.hover_alpha = props.hover_alpha
@@ -871,14 +888,20 @@ function popups.new(services)
       end
       draw_icon(ass, bounds.x + bounds.w / 2, bounds.y + bounds.h / 2,
            self.icon, "#FFFFFF", 24, self.alpha)
-      if self.enabled and self.tooltip and mouse_in(bounds) then
-        request_tooltip(self.tooltip, bounds, true)
+      local tooltip = type(self.tooltip) == "function" and
+        self.tooltip() or self.tooltip
+      local visible = (tonumber(self.alpha or "FF", 16) or 255) < 250
+      if visible and tooltip and mouse_in(bounds) then
+        request_tooltip(tooltip, bounds, true, self.shortcut)
       end
     end
     return node
   end
 
-  local function ChapterHeader(on_close, title, action_icon, right_action)
+  local function ChapterHeader(on_close, title, action_icon, right_action,
+      close_name)
+    local title_key = tostring(title or "chapters"):lower()
+      :gsub("[^%w]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     local node = {
       alpha = "00", title_alpha = "00", hover_alpha = "E6", interactive = false,
       title = title or "Chapters",
@@ -886,7 +909,11 @@ function popups.new(services)
       actions = {},
       modifier = Modifier():fillMaxWidth():height(dp(56))
     }
-    node.close = ChapterCloseButton({on_click = on_close, icon = action_icon})
+    node.close = ChapterCloseButton({
+      name = close_name or (title_key .. "-header-close"),
+      on_click = on_close,
+      icon = action_icon
+    })
     if right_action then
       local actions = right_action[1] and right_action or {right_action}
       for _, action in ipairs(actions) do
@@ -894,7 +921,10 @@ function popups.new(services)
           name = action.name,
           on_click = action.on_click,
           icon = action.icon,
-          tooltip = action.tooltip
+          tooltip = action.tooltip,
+          shortcut = action.shortcut,
+          on_press = action.on_press,
+          on_release = action.on_release
         })
       end
     end
@@ -1048,6 +1078,7 @@ function popups.new(services)
   end
 
   local function SpeedPopup(on_back)
+    local speed_min, speed_max, speed_step = 0.25, 3, 0.05
     local node = {
       width = dp(420), height = dp(190), speed = 1, interactive = false,
       panel_alpha = "00", text_alpha = "00", hover_alpha = "00",
@@ -1055,17 +1086,58 @@ function popups.new(services)
         name = "speed-dialog-panel", enabled = false, on_click = function() end
       })
     }
-    node.header = ChapterHeader(on_back, "Playback Speed", "arrow_back")
+    local function stepped_speed(value)
+      local steps = math.floor(
+        (clamp(value, speed_min, speed_max) - speed_min) / speed_step + 0.5)
+      return clamp(speed_min + steps * speed_step, speed_min, speed_max)
+    end
+    local function adjust_speed(amount)
+      mp.set_property_number("speed", stepped_speed(node.speed + amount))
+    end
+    local function speed_at_pointer(box)
+      return stepped_speed(speed_min +
+        clamp((pointer.x - box.x1) / box.w, 0, 1) *
+          (speed_max - speed_min))
+    end
+    node.header = ChapterHeader(on_back, "Playback Speed", "arrow_back", {
+      name = "playback-speed-temporary",
+      icon = "bolt_boost",
+      tooltip = function()
+        return string.format(
+          "Temporary %gx", tonumber(services.config.temporary_speed()) or 2)
+      end,
+      shortcut = "temporary-speed",
+      on_press = function() temporary_speed:activate() end,
+      on_release = function() temporary_speed:deactivate() end
+    }, "playback-speed-back")
+    node.decrease = ChapterCloseButton({
+      name = "playback-speed-decrease",
+      icon = "remove",
+      tooltip = "Decrease Speed",
+      shortcut = "speed-down",
+      on_click = function() adjust_speed(-speed_step) end
+    })
+    node.increase = ChapterCloseButton({
+      name = "playback-speed-increase",
+      icon = "add",
+      tooltip = "Increase Speed",
+      shortcut = "speed-up",
+      on_click = function() adjust_speed(speed_step) end
+    })
     node.slider = {dragging = false, modifier = Modifier():pointerArea({
       name = "playback-speed-slider", enabled = false,
+      on_keyboard_left = function()
+        adjust_speed(-speed_step)
+      end,
+      on_keyboard_right = function()
+        adjust_speed(speed_step)
+      end,
       on_press = function(box)
         node.slider.dragging = true
-        mp.set_property_number("speed", 0.25 +
-          clamp((pointer.x - box.x1) / box.w, 0, 1) * 2.75)
+        mp.set_property_number("speed", speed_at_pointer(box))
       end,
       on_move = function(box)
-        mp.set_property_number("speed", 0.25 +
-          clamp((pointer.x - box.x1) / box.w, 0, 1) * 2.75)
+        mp.set_property_number("speed", speed_at_pointer(box))
       end,
       on_release = function()
         node.slider.dragging = false
@@ -1076,7 +1148,8 @@ function popups.new(services)
     end
     function node.slider:draw(ass, bounds)
       local track_y, track_h = bounds.y + bounds.h / 2, dp(4)
-      local ratio = clamp((node.speed - 0.25) / 2.75, 0, 1)
+      local ratio = clamp(
+        (node.speed - speed_min) / (speed_max - speed_min), 0, 1)
       local cx = bounds.x + bounds.w * ratio
       local handle_w = node.slider.dragging and dp(2) or track_h
       local gap = dp(4)
@@ -1107,6 +1180,13 @@ function popups.new(services)
       self.slider.modifier.pointer_enabled = self.interactive
       self.header:update({alpha = self.text_alpha, hover_alpha = self.hover_alpha,
         interactive = self.interactive})
+      local button_props = {
+        alpha = self.text_alpha,
+        hover_alpha = self.hover_alpha,
+        enabled = self.interactive
+      }
+      self.decrease:update(button_props)
+      self.increase:update(button_props)
       for _, preset in ipairs(self.presets) do
         preset:update({speed = self.speed, interactive = self.interactive,
           text_alpha = self.text_alpha, hover_alpha = self.hover_alpha,
@@ -1123,8 +1203,19 @@ function popups.new(services)
       draw_text(ass, bounds.x + bounds.w / 2, bounds.y + dp(82),
         string.format("%.2fx", self.speed), 24, "#FFFFFF", self.text_alpha,
         default_text_font)
-      draw_node(self.slider, ass, Rect({x = bounds.x + dp(24), y = bounds.y + dp(98),
-        w = bounds.w - dp(48), h = dp(36)}))
+      local slider_y, button_size = bounds.y + dp(98), dp(36)
+      draw_node(self.decrease, ass, Rect({
+        x = bounds.x + dp(16), y = slider_y,
+        w = button_size, h = button_size
+      }))
+      draw_node(self.slider, ass, Rect({
+        x = bounds.x + dp(60), y = slider_y,
+        w = bounds.w - dp(120), h = dp(36)
+      }))
+      draw_node(self.increase, ass, Rect({
+        x = bounds.x2 - dp(52), y = slider_y,
+        w = button_size, h = button_size
+      }))
       local gap, pill_w = dp(8), dp(62)
       local total_w = #self.presets * pill_w + (#self.presets - 1) * gap
       local x = bounds.x + (bounds.w - total_w) / 2
@@ -1241,7 +1332,8 @@ function popups.new(services)
       item.stop_repeat = stop_repeat
       item.modifier = Modifier():width(dp(34)):height(dp(34)):clickable({
         name = name .. "-" .. suffix, enabled = false,
-        on_press = start_repeat, on_release = stop_repeat
+        on_press = start_repeat, on_release = stop_repeat,
+        on_keyboard = on_click
       })
       function item:measure(parent)
         return apply_modifier_size(self.modifier, {w = dp(34), h = dp(34)}, parent)
@@ -1324,7 +1416,7 @@ function popups.new(services)
     node.header = ChapterHeader(on_back, "Subtitle Settings", "arrow_back", {
       name = "subtitle-style-reset",
       icon = "restart_alt",
-      tooltip = "Reset subtitle settings",
+      tooltip = "Reset Subtitle Settings",
       on_click = reset_subtitle_style
     })
     node.delay = SubtitleAdjustRow("subtitle-delay", "Timing", 
@@ -1591,7 +1683,7 @@ function popups.new(services)
 
   local function VideoSettingsPopup(on_back)
     local node = {
-      width = dp(380), height = dp(332), interactive = false,
+      width = dp(380), height = dp(288), interactive = false,
       panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
       hover_alpha = "00", crop = "", gamma = 0, brightness = 0,
       saturation = 0, rotation = 0, shader_count = 0,
@@ -1611,11 +1703,9 @@ function popups.new(services)
     end
     node.header = ChapterHeader(on_back, "Video Settings", "arrow_back", {
       name = "video-settings-reset", icon = "restart_alt",
-      tooltip = "Reset video settings",
+      tooltip = "Reset Video Settings",
       on_click = reset_video_settings
     })
-    node.crop_row = SettingsActionRow("video-settings-crop", "crop",
-      function() set_settings_page("video_crop") end)
     node.gamma_row = SubtitleAdjustRow("video-settings-gamma", "Gamma",
       function()
         mp.set_property_number("gamma", clamp(node.gamma - 5, -100, 100))
@@ -1656,10 +1746,6 @@ function popups.new(services)
         interactive = self.interactive})
       local common = {interactive = self.interactive, text_alpha = self.text_alpha,
         secondary_alpha = self.secondary_alpha, hover_alpha = self.hover_alpha}
-      common.label, common.value = "Crop",
-        crop_label(self.crop, self.keepaspect, self.panscan)
-      self.crop_row:update(common)
-      common.label = nil
       common.value = string.format("%+d", math.floor(self.gamma + 0.5))
       self.gamma_row:update(common)
       common.value = string.format("%+d", math.floor(self.brightness + 0.5))
@@ -1680,8 +1766,8 @@ function popups.new(services)
       draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y,
         w = bounds.w, h = dp(56)}))
       local rows = {
-        {self.crop_row, 44}, {self.gamma_row, 44},
-        {self.brightness_row, 44}, {self.saturation_row, 44},
+        {self.gamma_row, 44}, {self.brightness_row, 44},
+        {self.saturation_row, 44},
         {self.rotation_row, 44}, {self.shaders_row, 44}
       }
       local y = bounds.y + dp(60)
@@ -1708,13 +1794,15 @@ function popups.new(services)
       function() set_settings_page("audio") end)
     node.subtitle_row = SettingsActionRow("settings-subtitle-row", "subtitles",
       function() set_settings_page("subtitles") end)
+    node.crop_row = SettingsActionRow("settings-crop-row", "crop",
+      function() set_settings_page("video_crop") end)
     node.speed_row = SettingsActionRow("settings-speed-row", "speed",
       function() set_settings_page("speed") end)
     node.video = TrackPopup(function() set_settings_page("root") end, {
       name = "settings-video", title = "Video", action_icon = "arrow_back",
       right_action = {
         name = "settings-video-options", icon = "tune",
-        tooltip = "Video settings",
+        tooltip = "Video Settings",
         on_click = function() set_settings_page("video_settings") end
       },
       state = settings_state,
@@ -1745,13 +1833,13 @@ function popups.new(services)
         {
           name = "settings-secondary-subtitles",
           icon = "filter_2",
-          tooltip = "Secondary subtitles",
+          tooltip = "Secondary Subtitles",
           on_click = function() set_settings_page("secondary_subtitles") end
         },
         {
           name = "settings-subtitles-style",
           icon = "subtitles_gear",
-          tooltip = "Subtitle settings",
+          tooltip = "Subtitle Settings",
           on_click = function() set_settings_page("subtitle_style") end
         }
       },
@@ -1796,9 +1884,7 @@ function popups.new(services)
     node.video_settings = VideoSettingsPopup(function()
       set_settings_page("video")
     end)
-    node.video_crop = VideoCropPopup(function()
-      set_settings_page("video_settings")
-    end)
+    node.video_crop = VideoCropPopup(function() set_settings_page("root") end)
     node.video_shaders = TrackPopup(function()
       set_settings_page("video_settings")
     end, {
@@ -1809,7 +1895,7 @@ function popups.new(services)
         on_click = open_shader_link_picker},
       right_action = {
         name = "settings-video-shaders-clear", icon = "delete_sweep",
-        tooltip = "Clear shaders",
+        tooltip = "Clear Shaders",
         on_click = clear_shaders
       },
       is_selected = function() return false end,
@@ -1851,6 +1937,10 @@ function popups.new(services)
         tostring(self.subtitle_track_count or math.max(0, #self.subtitle_items - 1)) .. ")",
         selected_track_label(self.subtitle_items, self.subtitle_id, "Off")
       self.subtitle_row:update(common)
+      common.label, common.value = "Crop",
+        crop_label(self.video_crop_value, self.video_keepaspect,
+          self.video_panscan)
+      self.crop_row:update(common)
       common.label, common.value = "Playback Speed", string.format("%gx", self.speed_value)
       self.speed_row:update(common)
       local page_props = {
@@ -1952,6 +2042,7 @@ function popups.new(services)
       local rows = {self.video_row}
       rows[#rows + 1] = self.audio_row
       rows[#rows + 1] = self.subtitle_row
+      rows[#rows + 1] = self.crop_row
       rows[#rows + 1] = self.speed_row
       for _, row in ipairs(rows) do
         draw_node(row, ass, Rect({x = bounds.x + dp(8), y = y,
@@ -2072,10 +2163,10 @@ function popups.new(services)
         end
         local desired_h
         if settings_state.page == "root" then
-          desired_h = dp(260)
+          desired_h = dp(308)
         elseif settings_state.page == "speed" then desired_h = dp(190)
         elseif settings_state.page == "subtitle_style" then desired_h = dp(288)
-        elseif settings_state.page == "video_settings" then desired_h = dp(332)
+        elseif settings_state.page == "video_settings" then desired_h = dp(288)
         elseif settings_state.page == "video_crop" then desired_h = dp(164)
         elseif settings_state.page == "video_shaders" and item_count == 0 then
           desired_h = dp(116)

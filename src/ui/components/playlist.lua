@@ -36,6 +36,9 @@ function playlist.new(services)
     }
     node.modifier:pointerArea({
       name = "playlist-row-" .. tostring(slot), enabled = false,
+      on_keyboard = function()
+        if node.index then mp.commandv("playlist-play-index", node.index - 1) end
+      end,
       on_press = function()
         if not node.item or not node.index then return end
         playlist_state.drag_from = node.index
@@ -107,9 +110,12 @@ function playlist.new(services)
     return node
   end
 
-  local function FooterButton(name, icon, tooltip, on_click)
+  local function FooterButton(name, icon, tooltip, on_click, shortcut,
+      tooltip_allow_when_suppressed, icon_size)
     local node = ui.IconButton({name = name, icon = icon, tooltip = tooltip,
-      on_click = on_click})
+      on_click = on_click, shortcut = shortcut,
+      tooltip_allow_when_suppressed = tooltip_allow_when_suppressed,
+      icon_size = icon_size})
     return node
   end
 
@@ -197,7 +203,7 @@ function playlist.new(services)
         mp.commandv(shuffled and "playlist-unshuffle" or "playlist-shuffle")
         playlist_state.shuffled = not shuffled
         render()
-      end)
+      end, nil, true, 22)
     node.loop = FooterButton("playlist-loop", "repeat", "Loop: off",
       function()
         local mode = (state.snapshot or {}).playlist_loop_mode or "off"
@@ -211,7 +217,7 @@ function playlist.new(services)
           mp.set_property("loop-file", "no")
           mp.set_property("loop-playlist", "no")
         end
-      end)
+      end, nil, true, 22)
 
     function node:update(snapshot, opacity, interactive, visible_rows)
       self.snapshot, self.opacity = snapshot, opacity
@@ -219,15 +225,15 @@ function playlist.new(services)
       self.visible_rows = visible_rows or 1
       self.shuffle:update({
         icon = snapshot.playlist_shuffled and "shuffle_on" or "shuffle",
-        tooltip = snapshot.playlist_shuffled and "Turn shuffle off" or "Shuffle",
+        tooltip = snapshot.playlist_shuffled and "Turn Shuffle Off" or "Shuffle",
         alpha = alpha(opacity)
       })
       local loop_mode = snapshot.playlist_loop_mode or "off"
       self.loop:update({
         icon = loop_mode == "one" and "repeat_one_on" or
           (loop_mode == "all" and "repeat_on" or "repeat"),
-        tooltip = loop_mode == "one" and "Loop: current item" or
-          (loop_mode == "all" and "Loop: playlist" or "Loop: off"),
+        tooltip = loop_mode == "one" and "Loop: Current Item" or
+          (loop_mode == "all" and "Loop: Playlist" or "Loop: Off"),
         alpha = alpha(opacity)
       })
       self.shuffle.modifier.pointer_enabled = interactive
@@ -351,10 +357,11 @@ function playlist.new(services)
     node.backdrop = Backdrop()
     node.content = ExpandedContent()
     node.playlist = FooterButton("playlist-button", "playlist_play", "Playlist",
-      function() set_open(not playlist_state.open) end)
+      function() set_open(not playlist_state.open) end, "open-playlist", true)
     node.previous = FooterButton("playlist-previous", "skip_previous", "Previous",
-      previous_item)
-    node.next = FooterButton("playlist-next", "skip_next", "Next", next_item)
+      previous_item, "playlist-prev", true)
+    node.next = FooterButton("playlist-next", "skip_next", "Next", next_item,
+      "playlist-next", true)
 
     function node:update(snapshot)
       self.snapshot = snapshot
@@ -395,7 +402,7 @@ function playlist.new(services)
         icon = "playlist_play",
         transition_icon = "menu_open",
         transition_progress = self.morph,
-        tooltip = self.morph < 0.5 and "Playlist" or "Collapse playlist"
+        tooltip = self.morph < 0.5 and "Playlist" or "Collapse"
       })
       self.previous:update({
         enabled = count > 1 and position >= 0 and (wraps or position > 0)
@@ -455,7 +462,7 @@ function playlist.new(services)
       if self.morph == 0 and not playlist_state.open and
         not playlist_state.animation:is_running() then
         draw_box(ass, source.x, source.y, source.x2, source.y2,
-          source.h / 2, "#050708", "78")
+          source.h / 2, "#050708", "58")
         draw_control_buttons(ass, source, source, 0)
       end
       local title = self.snapshot.media_title or ""
@@ -500,7 +507,7 @@ function playlist.new(services)
       -- The playlist morphs back into a persistent pill, unlike the context
       -- menu which closes into empty space. Preserve the pill's base opacity
       -- throughout the handoff so it never dims and then pops back in.
-      local shell_opacity = 0.53 + self.morph * 0.39
+      local shell_opacity = 0.65 + self.morph * 0.27
       local top_radius = dp(21) + dp(9) * control_progress
       local bottom_radius = dp(21)
       draw_round_box(ass, surface.x, surface.y, surface.x2, surface.y2,

@@ -129,6 +129,24 @@ function mpv_runtime.new(args)
       if args.render_dynamic then args.render_dynamic()
       else args.render_cached() end
     end
+    local function menu_bindings(on_escape)
+      local function handle(action)
+        return function() args.menu_keyboard:handle(action) end
+      end
+      return {
+        {"UP", handle("up")}, {"DOWN", handle("down")},
+        {"LEFT", handle("left")}, {"RIGHT", handle("right")},
+        {"ENTER", handle("activate")}, {"KP_ENTER", handle("activate")},
+        {"SPACE", handle("activate")},
+        {"HOME", handle("home")}, {"END", handle("end")},
+        {"PGUP", handle("page_up")}, {"PGDWN", handle("page_down")},
+        {"TAB", handle("next")}, {"Shift+TAB", handle("previous")},
+        {"ESC", function()
+          args.menu_keyboard:reset()
+          on_escape()
+        end}
+      }
+    end
     mp.observe_property("osd-dimensions", "native",
       function(...) controller():on_dimensions(...) end)
     mp.observe_property("display-hidpi-scale", "number",
@@ -265,7 +283,7 @@ function mpv_runtime.new(args)
     }, "material-osc-input", "force")
     mp.enable_key_bindings("material-osc-input",
       "allow-hide-cursor+allow-vo-dragging")
-    mp.set_key_bindings({{"ESC", args.close_context_menu}},
+    mp.set_key_bindings(menu_bindings(args.close_context_menu),
       "material-osc-context-menu", "force")
     mp.disable_key_bindings("material-osc-context-menu")
     for _, name in ipairs({"controller", "volume-popup"}) do
@@ -276,18 +294,48 @@ function mpv_runtime.new(args)
 
     for _, name in ipairs(args.navigation.dialogs) do
       local dialog_name = name
-      mp.set_key_bindings({{"ESC", function()
+      mp.set_key_bindings(menu_bindings(function()
         if dialog_name == "settings" and state.settings.open and
           state.settings.page ~= "root" then
           args.navigation:set_settings_page("root")
         elseif state[dialog_name].open then
           args.navigation:set_dialog_open(dialog_name, false)
         end
-      end}}, args.navigation:binding(dialog_name), "force")
+      end), args.navigation:binding(dialog_name), "force")
       mp.disable_key_bindings(args.navigation:binding(dialog_name))
     end
     mp.add_forced_key_binding("mbtn_left", "material-osc-primary",
       function(event) controller():on_primary_button(event) end, {complex = true})
+    local function open_context_menu_from_keyboard()
+      local x, y = mp.get_mouse_pos()
+      if not x or not y or x < 0 or y < 0 then
+        x, y = state.viewport.w / 2, state.viewport.h / 2
+      end
+      args.open_context_menu(x, y)
+    end
+    mp.add_key_binding("MENU", "material-osc-open-context-menu",
+      open_context_menu_from_keyboard)
+    mp.add_key_binding("Shift+F10", "material-osc-open-context-menu-alternate",
+      open_context_menu_from_keyboard)
+    mp.add_key_binding("Ctrl+,", "material-osc-open-settings", function()
+      if state.update.open then return end
+      local opening = not state.settings.open
+      args.close_context_menu()
+      args.set_settings_open(opening)
+      if opening then controller():show() end
+    end)
+    mp.add_key_binding("Alt+p", "material-osc-open-playlist", function()
+      if state.update.open then return end
+      local opening = not state.playlist.open
+      args.close_context_menu()
+      args.set_playlist_open(opening)
+      if opening then controller():show() end
+    end)
+    mp.add_key_binding(nil, "hold-double-speed", function(event)
+      args.temporary_speed:handle(event)
+    end, {complex = true, repeatable = false})
+    state.properties["input-bindings"] =
+      mp.get_property_native("input-bindings", {}) or {}
 
     mp.register_script_message("material-osc-show", function() controller():show() end)
     mp.register_script_message("material-osc-hide",

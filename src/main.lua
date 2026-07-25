@@ -8,6 +8,8 @@ local opts = {
   window_controls = "auto",
   youtube_quality = "auto",
   force_hwdec = true,
+  force_display_resample = true,
+  force_force_window = true,
   directory_playlist = true,
   directory_playlist_sort = "name",
   context_menu = true,
@@ -15,7 +17,8 @@ local opts = {
   seek_step_seconds = 5,
   dpi_scale = "auto",
   accent_color = "#00bbff",
-  max_volume_percentage = 150
+  max_volume_percentage = 150,
+  temporary_speed = 2
 }
 local option_defaults = {}
 for name, value in pairs(opts) do option_defaults[name] = value end
@@ -35,6 +38,8 @@ local function normalize_option_values(values)
     math.min(50, tonumber(values.seeking_zone_percentage) or 15))
   values.max_volume_percentage = math.max(100,
     tonumber(values.max_volume_percentage) or 150)
+  values.temporary_speed = math.max(0.01,
+    tonumber(values.temporary_speed) or 2)
   values.window_controls = tostring(values.window_controls or "auto"):lower()
   if values.window_controls ~= "yes" and values.window_controls ~= "no" and
     values.window_controls ~= "auto" then
@@ -54,10 +59,18 @@ end)
 normalize_option_values(opts)
 
 local configured_hwdec = mp.get_property("hwdec", "no") or "no"
-local function apply_force_hwdec()
+local configured_video_sync =
+  mp.get_property("video-sync", "audio") or "audio"
+local configured_force_window =
+  mp.get_property("force-window", "no") or "no"
+local function apply_forced_mpv_options()
   mp.set_property("hwdec", opts.force_hwdec and "auto" or configured_hwdec)
+  mp.set_property("video-sync", opts.force_display_resample and
+    "display-resample" or configured_video_sync)
+  mp.set_property("force-window", opts.force_force_window and
+    "yes" or configured_force_window)
 end
-apply_force_hwdec()
+apply_forced_mpv_options()
 
 local assdraw = require "mp.assdraw"
 local msg = require "mp.msg"
@@ -75,6 +88,7 @@ local application_state = require "src.core.application_state"
 local frame_runtime = require "src.core.frame_runtime"
 local controller_module = require "src.core.controller"
 local navigation_module = require "src.core.navigation"
+local menu_keyboard_module = require "src.core.menu_keyboard"
 local mpv_runtime_module = require "src.core.mpv_runtime"
 local config_watcher_module = require "src.services.config_watcher"
 
@@ -84,6 +98,8 @@ local media_information_close_module =
   require "src.ui.components.media_information_close"
 local update_dialog_module = require "src.ui.components.update_dialog"
 local playback_indicator_module = require "src.ui.components.playback_indicator"
+local temporary_speed_indicator_module =
+  require "src.ui.components.temporary_speed_indicator"
 local edge_seek_module = require "src.ui.components.edge_seek"
 local seekbar_renderer_module = require "src.ui.components.seekbar_renderer"
 local loading_indicator = require "src.ui.loading_indicator"
@@ -101,6 +117,8 @@ local shader_loader_module = require "src.services.shader_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
 local bookmark_service_module = require "src.services.bookmark_service"
 local context_actions_module = require "src.services.context_actions"
+local keybinding_hints_module = require "src.services.keybinding_hints"
+local temporary_speed_module = require "src.services.temporary_speed"
 local subtitle_position_module = require "src.services.subtitle_position"
 local update_service_module = require "src.services.update_service"
 
@@ -155,6 +173,11 @@ local function create_app(services)
   node.media_information_close = media_information_close_module.new(services)
   node.update_dialog = update_dialog_module.new(services)
   node.edge_seek = edge_seek_module.new(services)
+  node.temporary_speed = temporary_speed_indicator_module.new({
+    state = state.temporary_speed,
+    ui = ui,
+    value = services.config.temporary_speed
+  })
   local visibility
 
   function node:update(snapshot)
@@ -237,16 +260,12 @@ local function create_app(services)
   end
 
   local function modal_is_open()
-    if state.update.open or state.context_menu.open or
-      state.context_menu.pending_x ~= nil then
-      return true
-    end
-    for _, name in ipairs({
-      "playlist", "chapter", "subtitle", "audio", "settings"
-    }) do
-      if state[name].open then return true end
-    end
-    return false
+    local playlist_visible, chapter_visible, settings_visible, context_visible =
+      visibility()
+    return state.update.open or playlist_visible or chapter_visible or
+      settings_visible or context_visible or
+      state.subtitle.open or state.subtitle.animation:is_running() or
+      state.audio.open or state.audio.animation:is_running()
   end
 
   function node:draw_base(ass, root)
@@ -310,25 +329,37 @@ local function create_app(services)
           services.ui.alpha(opacity), true)
       end
     end
+    local pointer_x, pointer_y = state.pointer.x, state.pointer.y
+    if modal_is_open() then state.pointer.x, state.pointer.y = -1, -1 end
     if state.controller.opacity.value > 0 then
       if self.seekbar.bounds then self.seekbar:draw(ass, self.seekbar.bounds) end
       self.controls:draw_dynamic(ass)
     end
+    state.pointer.x, state.pointer.y = pointer_x, pointer_y
   end
 
   function node:draw_interaction(ass, root)
     local pointer_x, pointer_y = state.pointer.x, state.pointer.y
+    local volume_owns_pointer = state.volume.popup_bounds and
+      ui.mouse_in(state.volume.popup_bounds)
     -- A closing spring can cross zero and rebound before settling. Visual
     -- visibility follows that motion, but hover ownership must not: once a
     -- popup starts closing, immediately hand hover back to the controls below
     -- it and keep it there throughout the spring tail.
-    if modal_is_open() then
+    local modal_open = modal_is_open()
+    if modal_open or volume_owns_pointer then
       state.pointer.x, state.pointer.y = -1, -1
     end
     if state.controller.opacity.value > 0 then
       ui.draw_node(self.controller, ass, root)
+      if state.window_controls.bounds then
+        ui.draw_node(self.window_controls, ass, root)
+      end
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
+    if volume_owns_pointer and not modal_open then
+      self.controls:draw_volume_interaction(ass)
+    end
 
     if self.no_video_opacity > 0 then
       local icon_size = math.min(root.w, root.h) * 0.34 / ui.dp(1)
@@ -339,11 +370,15 @@ local function create_app(services)
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
     self.edge_seek:draw(ass, root)
-    ui.draw_node(self.tooltip, ass, root)
     ui.draw_node(self.media_information_close, ass, root)
   end
 
   function node:draw_modal(ass, root)
+    local pointer_x, pointer_y = state.pointer.x, state.pointer.y
+    if state.input.keyboard_focus then
+      state.pointer.x, state.pointer.y = -1, -1
+    end
+    state.input.drawing_keyboard_focus = true
     local playlist_visible, chapter_visible, settings_visible, context_visible =
       visibility()
     if playlist_visible then self.playlist_controls:draw_expanded(ass, root)
@@ -351,6 +386,12 @@ local function create_app(services)
     elseif settings_visible then ui.draw_node(self.settings, ass, root) end
     if context_visible then ui.draw_node(self.context_menu, ass, root) end
     if state.update.open then ui.draw_node(self.update_dialog, ass, root) end
+    state.input.drawing_keyboard_focus = false
+    state.pointer.x, state.pointer.y = pointer_x, pointer_y
+    self.temporary_speed:draw(ass, root)
+    -- Tooltips must be composed after modal content so popup controls can
+    -- request them and the resulting surface stays visually above the popup.
+    ui.draw_node(self.tooltip, ass, root)
   end
 
   function node:draw_layer(layer, ass, root)
@@ -375,6 +416,7 @@ local function create_app(services)
       state.edge_seek.left.opacity.value > 0.001 or
       state.edge_seek.right.opacity.value > 0.001 or
       state.tooltip.opacity.value > 0.001 or state.update.open or
+      state.temporary_speed.active or
       self.media_information_close.visible then
       return true
     end
@@ -419,7 +461,10 @@ local runtime = application_state.new({
   animation = animation,
   now_ms = function() return mp.get_time() * 1000 end
 })
-local subtitle_position = subtitle_position_module.new({mp = mp})
+local subtitle_position = subtitle_position_module.new({
+  mp = mp,
+  animation = animation
+})
 
 local thumbnail_service
 local draw_thumbnail_preview
@@ -454,7 +499,14 @@ local ass_color = function(hex) return ui_renderer:ass_color(hex) end
 local ass_alpha_for_opacity = function(opacity) return ui_renderer:alpha(opacity) end
 
 local pointer = frame_runtime.pointer.new(runtime)
-local mouse_in = function(box) return pointer:contains(box) end
+local mouse_in = function(box)
+  if pointer:contains(box) then return true end
+  if not runtime.input.drawing_keyboard_focus then return false end
+  local focused = runtime.input.hitboxes[runtime.input.keyboard_focus]
+  if not focused then return false end
+  local x, y = focused.x1 + focused.w / 2, focused.y1 + focused.h / 2
+  return x >= box.x1 and x <= box.x2 and y >= box.y1 and y <= box.y2
+end
 local hitbox_at_cursor = function() return pointer:hitbox_at_cursor() end
 
 local player = player_module.new({
@@ -466,15 +518,20 @@ local chapter_name_at = function(value) return player:chapter_at(value) end
 local seek_pos_from_mouse = function(box) return player:seek_position(box) end
 local seek_to_pos = function(value) return player:seek(value) end
 
+local menu_keyboard
 local navigation = navigation_module.new({
   runtime = runtime, mp = mp, dp = dp,
   render = function() if render then render() end end
 })
-local function set_chapter_dialog_open(open) navigation:set_dialog_open("chapter", open) end
-local function set_playlist_dialog_open(open) navigation:set_dialog_open("playlist", open) end
-local function set_subtitle_dialog_open(open) navigation:set_dialog_open("subtitle", open) end
-local function set_audio_dialog_open(open) navigation:set_dialog_open("audio", open) end
-local function set_settings_dialog_open(open) navigation:set_dialog_open("settings", open) end
+local function set_dialog_open(name, open)
+  if not open and menu_keyboard then menu_keyboard:reset(name) end
+  navigation:set_dialog_open(name, open)
+end
+local function set_chapter_dialog_open(open) set_dialog_open("chapter", open) end
+local function set_playlist_dialog_open(open) set_dialog_open("playlist", open) end
+local function set_subtitle_dialog_open(open) set_dialog_open("subtitle", open) end
+local function set_audio_dialog_open(open) set_dialog_open("audio", open) end
+local function set_settings_dialog_open(open) set_dialog_open("settings", open) end
 local function set_settings_page(page) navigation:set_settings_page(page) end
 local function toggle_subtitles() navigation:toggle_subtitles() end
 local function cycle_subtitle(direction) navigation:cycle_subtitle(direction) end
@@ -500,6 +557,7 @@ local function close_context_menu(click_x, click_y)
     set_context_close_anchor(nil, nil)
   end
   runtime.context_menu.open = false
+  if menu_keyboard then menu_keyboard:reset("context_menu") end
   mp.disable_key_bindings("material-osc-context-menu")
   if render then render() end
 end
@@ -525,6 +583,11 @@ local function open_context_menu(x, y)
   mp.enable_key_bindings("material-osc-context-menu")
   if render then render() end
 end
+
+menu_keyboard = menu_keyboard_module.new({
+  runtime = runtime,
+  render = function() if render then render() end end
+})
 
 local subtitle_loader = subtitle_loader_module.new({
   render = function(...) return render(...) end
@@ -584,6 +647,9 @@ local preview_seek_to_mouse = function(box) return player:preview_seek(box) end
 
 local draw_box = function(...) return ui_renderer:draw_box(...) end
 local draw_round_box = function(...) return ui_renderer:draw_round_box(...) end
+local draw_connected_pill_segment = function(...)
+  return ui_renderer:draw_connected_pill_segment(...)
+end
 local draw_rect = function(...) return ui_renderer:draw_rect(...) end
 local draw_boxes = function(...) return ui_renderer:draw_boxes(...) end
 local draw_text = function(...) return ui_renderer:draw_text(...) end
@@ -625,15 +691,29 @@ draw_seekbar = seekbar_renderer_module.new({
   enqueue_effect = enqueue_effect, thumbnail_service = thumbnail_service
 })
 
+local keybinding_hints = keybinding_hints_module.new({
+  bindings = function()
+    return mp.get_property_native("input-bindings",
+      runtime.properties["input-bindings"] or {}) or {}
+  end,
+  now = function() return mp.get_time() end
+})
 local tooltip_service = tooltip_service_module.new({
   runtime = runtime, dp = dp, clamp = clamp,
   enabled = function() return opts.tooltip end,
-  text_width = text_intrinsic_width
+  delay = function()
+    local timeout = math.max(0, tonumber(opts.mouse_timeout) or 0)
+    return timeout > 0 and math.min(0.4, timeout * 0.4) or 0.2
+  end,
+  text_width = text_intrinsic_width,
+  keybinding_hints = keybinding_hints
 })
 local function request_tooltip(...) return tooltip_service:request(...) end
 local compose = compose_module.new({
   runtime = runtime, dp = dp, mouse_in = mouse_in,
-  draw_box = draw_box, draw_icon = draw_icon, draw_text = draw_text,
+  draw_box = draw_box,
+  draw_connected_pill_segment = draw_connected_pill_segment,
+  draw_icon = draw_icon, draw_text = draw_text,
   text_intrinsic_width = text_intrinsic_width,
   request_tooltip = request_tooltip,
   default_text_font = default_text_font,
@@ -646,7 +726,9 @@ local draw_node = compose.draw_node
 local set_render_pass, is_render_pass =
   compose.set_render_pass, compose.is_render_pass
 local IconButton, TextItem = compose.IconButton, compose.TextItem
-local Visibility, Row, Column, Pill = compose.Visibility, compose.Row, compose.Column, compose.Pill
+local Visibility, Row, Column, Pill =
+  compose.Visibility, compose.Row, compose.Column, compose.Pill
+local ConnectedPill = compose.ConnectedPill
 local updater = update_service_module.new({
   state = runtime, mp = mp, utils = utils, msg = msg,
   script_path = script_source, font_dir = asset_paths.release_font_dir,
@@ -659,9 +741,11 @@ local services = {
   context_actions = context_actions,
   close_context_menu = close_context_menu,
   config = {
-    opts = opts, tooltip_delay = tooltip_service.delay,
+    opts = opts,
+    tooltip_delay = function() return tooltip_service:current_delay() end,
     tooltip_slide_distance = tooltip_service.slide_distance,
-    max_volume_percentage = max_volume_percentage
+    max_volume_percentage = max_volume_percentage,
+    temporary_speed = function() return opts.temporary_speed end
   },
   platform = {msg = msg, utils = utils},
   effects = {
@@ -687,6 +771,7 @@ local services = {
     content_bounds = content_bounds,
     draw_node = draw_node, IconButton = IconButton, TextItem = TextItem,
     Visibility = Visibility, Row = Row, Column = Column, Pill = Pill,
+    ConnectedPill = ConnectedPill,
     request_tooltip = request_tooltip,
     set_render_pass = set_render_pass,
     is_render_pass = is_render_pass
@@ -716,12 +801,22 @@ local services = {
     toggle_subtitles = toggle_subtitles, cycle_subtitle = cycle_subtitle
   }
 }
+services.keybinding_hints = keybinding_hints
 local playback_indicator = playback_indicator_module.new({
   state = runtime.playback_indicator, mp = mp, ui = services.ui,
   render = function() render() end
 })
 services.playback_indicator = playback_indicator
 services.loading = {draw = draw_loading_shape_morph}
+local temporary_speed = temporary_speed_module.new({
+  state = runtime.temporary_speed,
+  mp = mp,
+  value = function() return opts.temporary_speed end,
+  render = function()
+    if render then render(false, "interaction") end
+  end
+})
+services.temporary_speed = temporary_speed
 local app = create_app(services)
 
 local snapshot_reader = snapshot_module.cached_reader({
@@ -741,7 +836,11 @@ local animation_coordinator = animation_coordinator_module.new({
     return opts.seeking_zone_percentage / 100
   end,
   edge_seek_top_inset = edge_seek_top_inset,
-  hide_cursor = function() runtime_host:set_cursor_autohide("always") end
+  hide_cursor = function() runtime_host:set_cursor_autohide("always") end,
+  needs_display_rate = function()
+    return subtitle_position:is_running() or runtime.snapshot.buffering or
+      runtime.ytdl.caption_loading_id ~= nil
+  end
 })
 local function update_animation_targets(now)
   animation_coordinator:update(now)
@@ -749,11 +848,16 @@ end
 
 runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
+  menu_keyboard = menu_keyboard,
   playback_indicator = playback_indicator,
   stream_quality = stream_quality,
   directory_playlist = directory_playlist,
   bookmarks = bookmark_service,
+  temporary_speed = temporary_speed,
   close_context_menu = close_context_menu,
+  open_context_menu = open_context_menu,
+  set_settings_open = set_settings_dialog_open,
+  set_playlist_open = set_playlist_dialog_open,
   controller = function() return controller end,
   render = function() render() end,
   render_cached = function() render(false) end,
@@ -775,18 +879,21 @@ runtime_host = mpv_runtime_module.new({
     local animation_running = animation_coordinator:is_running()
     local tooltip_running = tooltip_service:needs_frames(mp.get_time())
     local app_running = app:needs_continuous_render()
+    local subtitles_moving = subtitle_position:is_running(mp.get_time())
     local buffering = runtime.snapshot.buffering
     local captions = runtime.ytdl.caption_loading_id ~= nil
     if performance then
       local reason = animation_running and "animation" or
         (tooltip_running and "tooltip") or (app_running and "app") or
+        (subtitles_moving and "subtitles") or
         (buffering and "buffering") or (captions and "captions")
       if reason then
         local key = "continuous_" .. reason
         performance[key] = (performance[key] or 0) + 1
       end
     end
-    return animation_running or tooltip_running or app_running or buffering or captions
+    return animation_running or tooltip_running or app_running or
+      subtitles_moving or buffering or captions
   end,
   hidden_playback_progress_visible = function()
     return opts.show_mini_seekbar
@@ -829,6 +936,16 @@ local function draw_overlay_layer(name, default_pass, register_interactions)
   local overlay = layer.overlay
   overlay.res_x, overlay.res_y = runtime.viewport.w, runtime.viewport.h
   set_render_pass(name, default_pass, register_interactions)
+  if name == "modal" and register_interactions then
+    -- Modal pages reuse one overlay while their contents change. Disable the
+    -- previous page's hitboxes first; controls drawn below re-enable only the
+    -- hitboxes that belong to the current page.
+    for _, hitbox in pairs(runtime.input.hitboxes) do
+      if hitbox.render_pass == "modal" then hitbox.enabled = false end
+    end
+    runtime.input.keyboard_generation =
+      runtime.input.keyboard_generation + 1
+  end
   local ass = assdraw.ass_new()
   app:draw_layer(name, ass,
     Rect({x = 0, y = 0, w = runtime.viewport.w, h = runtime.viewport.h}))
@@ -859,8 +976,9 @@ local renderer = frame_runtime.renderer.new({
     local controller_bounds = runtime.controller.bounds
     subtitle_position:update(
       controller_bounds and controller_bounds.h or 0,
-      runtime.controller.opacity.value,
-      runtime.viewport.h)
+      runtime.controller.opacity.target,
+      runtime.viewport.h,
+      mp.get_time())
   end,
   on_frame = performance and function(mode)
     if mode == "full" then
@@ -900,6 +1018,9 @@ controller = controller_module.new({
   pointer_feedback_changed = function()
     return animation_coordinator:pointer_feedback_changed()
   end,
+  tooltip_hover_changed = function()
+    tooltip_service:reset_hover()
+  end,
   -- At 240 Hz, redrawing a pixel-sensitive seek preview on every hardware
   -- mouse sample costs more than the rest of the visible OSC. A 120 Hz cap
   -- still gives an 8.3 ms response while popup springs remain display-paced.
@@ -921,7 +1042,11 @@ options_update_handler = function(changed)
   if changed.context_menu and not opts.context_menu then
     close_context_menu()
   end
-  if changed.force_hwdec then apply_force_hwdec() end
+  if changed.force_hwdec or changed.force_display_resample or
+    changed.force_force_window then
+    apply_forced_mpv_options()
+  end
+  if changed.temporary_speed then temporary_speed:update_target() end
   if changed.dpi_scale or changed.single_click_actions_enabled or
     changed.seeking_zone_percentage or changed.seek_step_seconds or
     changed.max_volume_percentage then

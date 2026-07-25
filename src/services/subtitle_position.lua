@@ -9,16 +9,24 @@ end
 
 function subtitle_position.new(args)
   local mp = args.mp
+  local offset_animation = args.animation.spring({
+    initial = 0,
+    stiffness = args.spring_stiffness or 420,
+    damping = args.spring_damping or 32,
+    clock = function() return mp.get_time() end
+  })
   local offset_property = "sub-margin-y-offset"
   local has_offset_property = contains(
     mp.get_property_native("property-list", {}), offset_property)
-  local property = has_offset_property and offset_property or "sub-margin-y"
+  local property = has_offset_property and offset_property or "sub-pos"
   local baseline = mp.get_property_number(property, 0) or 0
   local service = {
     property = property,
     baseline = baseline,
     last_value = nil,
-    last_margin = nil
+    last_margin = nil,
+    offset_animation = offset_animation,
+    initialized = false
   }
 
   local function set_number(value)
@@ -39,21 +47,37 @@ function subtitle_position.new(args)
     service.last_margin = bottom
   end
 
-  function service:update(controller_height, opacity, viewport_height)
+  function service:update(controller_height, visibility_target, viewport_height,
+      now)
     viewport_height = math.max(1, tonumber(viewport_height) or 1)
     controller_height = math.max(0, tonumber(controller_height) or 0)
-    opacity = math.max(0, math.min(1, tonumber(opacity) or 0))
-    local occupied_pixels = controller_height * opacity
+    visibility_target = math.max(
+      0, math.min(1, tonumber(visibility_target) or 0))
+    now = tonumber(now) or mp.get_time()
+    local desired_pixels = controller_height * visibility_target
+    self.initialized = true
+    self.offset_animation:set_target(desired_pixels)
+    self.offset_animation:update(now)
+    local occupied_pixels = self.offset_animation.value
     publish_margin(occupied_pixels / viewport_height)
 
-    local offset = 0
+    local value = baseline
     if mp.get_property("sub-align-y", "bottom") == "bottom" then
-      offset = occupied_pixels
-      if mp.get_property_native("sub-scale-by-window") ~= false then
-        offset = offset * 720 / viewport_height
+      if has_offset_property then
+        local offset = occupied_pixels
+        if mp.get_property_native("sub-scale-by-window") ~= false then
+          offset = offset * 720 / viewport_height
+        end
+        value = baseline + offset
+      else
+        value = baseline - occupied_pixels * 100 / viewport_height
       end
     end
-    set_number(baseline + offset)
+    set_number(value)
+  end
+
+  function service:is_running()
+    return self.initialized and self.offset_animation:is_running()
   end
 
   function service:dispose()
@@ -66,6 +90,8 @@ function subtitle_position.new(args)
       l = 0, r = 0, t = 0, b = 0
     })
     self.last_value, self.last_margin = nil, nil
+    self.initialized = false
+    self.offset_animation:snap(0)
   end
 
   return service

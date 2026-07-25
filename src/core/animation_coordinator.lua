@@ -41,6 +41,9 @@ function animation_coordinator.new(args)
   end
 
   function service:recommended_interval(base)
+    if args.needs_display_rate and args.needs_display_rate() then
+      return base
+    end
     if runtime.volume.animation:is_running() or
       runtime.context_menu.animation:is_running() or
       runtime.context_menu.width_animation:is_running() or
@@ -97,8 +100,10 @@ function animation_coordinator.new(args)
     local pointer = runtime.pointer
     local controller_bounds = runtime.controller.bounds
     local window_controls_bounds = runtime.window_controls.bounds
+    local volume_popup_bounds = runtime.volume.popup_bounds
     local over_controller = (controller_bounds and args.mouse_in(controller_bounds)) or
-      (window_controls_bounds and args.mouse_in(window_controls_bounds))
+      (window_controls_bounds and args.mouse_in(window_controls_bounds)) or
+      (volume_popup_bounds and args.mouse_in(volume_popup_bounds))
     local context_visible = runtime.context_menu.open or
       runtime.context_menu.pending_x ~= nil or
       runtime.context_menu.animation:is_running() or
