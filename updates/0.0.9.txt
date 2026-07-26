@@ -1,0 +1,8 @@
+- Added a Contrast control to Video Settings, alongside gamma, brightness, saturation, rotation, and shader controls.
+- Disabling the built-in context menu now releases right-click, Menu, and Shift+F10 to mpv and other scripts, including when the option is changed through live configuration reloads.
+- Improved mouse-timeout behavior so hidden edge-seek and volume feedback no longer remains active after the pointer becomes idle, while clicking, scrolling, or moving the pointer restores interaction normally.
+- Refined the playback controls with a clearer chapter selector, improved time and cached-time styling, tighter action-button spacing, and more consistent hover feedback.
+- Polished Playlist sizing, footer controls, icon treatment, and open/close transitions, eliminating the blank flash that could appear when its animation finished.
+- Tooltips now wait slightly longer before appearing, reducing accidental popups while moving across controls.
+- Successful updates now keep automatic updates enabled by default, while still allowing them to be disabled from the completed-update dialog.
+- Improved release-note formatting and clarified the context-menu configuration documentation.

@@ -130,7 +130,7 @@ function update_dialog.new(services)
       header_separator_width + header_version_width
     local header_x = panel.x + (panel.w - header_group_width) / 2
     draw_icon(ass, header_x + header_icon_size / 2, header_center_y,
-      state.done and "check_circle" or "system_update", "#FFFFFF",
+      state.done and "check_circle" or "system_update_alt", "#FFFFFF",
       22, "00", true)
     draw_text(ass, header_x + header_icon_size + gap, header_center_y,
       header_text, 25, "#FFFFFF", "00", ui.default_text_font, 4, false, true)

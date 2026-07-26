@@ -27,6 +27,7 @@ function navigation.new(args)
     runtime.playlist.drag_from, runtime.playlist.drag_to = nil, nil
     runtime.playlist.drag_start_y = nil
     runtime.playlist.dragging_scroll = false
+    runtime.playlist.handoff = false
   end
 
   function service:scroll_to_active(state, items, active_id)
@@ -135,6 +136,7 @@ function navigation.new(args)
     runtime.playlist.drag_from, runtime.playlist.drag_to = nil, nil
     runtime.playlist.drag_start_y = nil
     runtime.playlist.dragging_scroll = false
+    runtime.playlist.handoff = false
     runtime.playlist.width_animation:snap(args.dp(118))
     runtime.playlist.height_animation:snap(args.dp(42))
     local state = runtime.settings

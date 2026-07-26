@@ -117,6 +117,7 @@ function animation_coordinator.new(args)
     local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
       runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
     local edge_allowed = args.single_click_actions_enabled() and
+      not runtime.controller.pointer_timed_out and
       not edge_modal and not over_controller and
       pointer.x >= 0 and pointer.y >= args.edge_seek_top_inset()
     local edge_width = runtime.viewport.w * args.seeking_zone_fraction()
@@ -149,8 +150,11 @@ function animation_coordinator.new(args)
       args.hide_cursor()
     end
     local wants_volume = not modal and (runtime.volume.dragging or
-      (runtime.volume.button_bounds and args.mouse_in(runtime.volume.button_bounds)) or
-      (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)))
+      (not runtime.controller.pointer_timed_out and
+        ((runtime.volume.button_bounds and
+          args.mouse_in(runtime.volume.button_bounds)) or
+          (runtime.volume.popup_bounds and
+            args.mouse_in(runtime.volume.popup_bounds)))))
     runtime.volume.animation:set_target(wants_volume and 1 or 0)
     runtime.volume.animation:update(now)
 

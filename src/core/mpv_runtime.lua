@@ -2,9 +2,12 @@ local mpv_runtime = {}
 
 function mpv_runtime.new(args)
   local state, mp = args.state, args.mp
+  local context_menu_mouse_binding = "material-osc-context-menu-mouse"
+  local context_menu_keyboard_binding = "material-osc-context-menu-keyboard"
   local service = {
     original_cursor_autohide = nil,
     cursor_autohide = nil,
+    context_menu_enabled = nil,
     mouse_areas = {}
   }
 
@@ -27,9 +30,25 @@ function mpv_runtime.new(args)
     mp.set_property("cursor-autohide", value)
   end
 
+  function service:set_context_menu_enabled(enabled)
+    enabled = not not enabled
+    if self.context_menu_enabled == enabled then return end
+    self.context_menu_enabled = enabled
+    if enabled then
+      mp.enable_key_bindings(context_menu_mouse_binding,
+        "allow-hide-cursor+allow-vo-dragging")
+      mp.enable_key_bindings(context_menu_keyboard_binding)
+    else
+      mp.disable_key_bindings(context_menu_mouse_binding)
+      mp.disable_key_bindings(context_menu_keyboard_binding)
+    end
+  end
+
   function service:update_mouse_area()
     self:set_mouse_area("material-osc-showhide", 0, 0, 0, 0)
     self:set_mouse_area("material-osc-input",
+      0, 0, state.viewport.w, state.viewport.h)
+    self:set_mouse_area(context_menu_mouse_binding,
       0, 0, state.viewport.w, state.viewport.h)
     local controller = state.controller.bounds
     if controller and state.controller.opacity.value > 0 then
@@ -170,7 +189,8 @@ function mpv_runtime.new(args)
       {"video-crop", "string"}, {"keepaspect", "bool"},
       {"panscan", "number"}, {"video-rotate", "number"},
       {"gamma", "number"}, {"brightness", "number"},
-      {"saturation", "number"}, {"glsl-shaders", "native"},
+      {"contrast", "number"}, {"saturation", "number"},
+      {"glsl-shaders", "native"},
       {"sub-delay", "number"}, {"sub-font-size", "number"},
       {"sub-border-size", "number"}, {"sub-color", "string"},
       {"sub-font", "string"}, {"volume-max", "number"}
@@ -277,12 +297,27 @@ function mpv_runtime.new(args)
     mp.set_key_bindings({
       {"mouse_move", move}, {"mouse_leave", leave},
       {"mbtn_left_dbl", function() controller():on_primary_double() end},
-      {"mbtn_right", function() controller():on_secondary_down() end},
       {"wheel_up", function() controller():on_wheel(-1) end},
       {"wheel_down", function() controller():on_wheel(1) end}
     }, "material-osc-input", "force")
     mp.enable_key_bindings("material-osc-input",
       "allow-hide-cursor+allow-vo-dragging")
+    mp.set_key_bindings({
+      {"mbtn_right", function() controller():on_secondary_down() end}
+    }, context_menu_mouse_binding, "force")
+    local function open_context_menu_from_keyboard()
+      local x, y = mp.get_mouse_pos()
+      if not x or not y or x < 0 or y < 0 then
+        x, y = state.viewport.w / 2, state.viewport.h / 2
+      end
+      args.open_context_menu(x, y)
+    end
+    mp.set_key_bindings({
+      {"MENU", open_context_menu_from_keyboard},
+      {"Shift+F10", open_context_menu_from_keyboard}
+    }, context_menu_keyboard_binding)
+    self.context_menu_enabled = nil
+    self:set_context_menu_enabled(args.context_menu_enabled())
     mp.set_key_bindings(menu_bindings(args.close_context_menu),
       "material-osc-context-menu", "force")
     mp.disable_key_bindings("material-osc-context-menu")
@@ -306,17 +341,6 @@ function mpv_runtime.new(args)
     end
     mp.add_forced_key_binding("mbtn_left", "material-osc-primary",
       function(event) controller():on_primary_button(event) end, {complex = true})
-    local function open_context_menu_from_keyboard()
-      local x, y = mp.get_mouse_pos()
-      if not x or not y or x < 0 or y < 0 then
-        x, y = state.viewport.w / 2, state.viewport.h / 2
-      end
-      args.open_context_menu(x, y)
-    end
-    mp.add_key_binding("MENU", "material-osc-open-context-menu",
-      open_context_menu_from_keyboard)
-    mp.add_key_binding("Shift+F10", "material-osc-open-context-menu-alternate",
-      open_context_menu_from_keyboard)
     mp.add_key_binding("Ctrl+,", "material-osc-open-settings", function()
       if state.update.open then return end
       local opening = not state.settings.open

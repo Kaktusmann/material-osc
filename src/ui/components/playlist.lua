@@ -115,7 +115,7 @@ function playlist.new(services)
     local node = ui.IconButton({name = name, icon = icon, tooltip = tooltip,
       on_click = on_click, shortcut = shortcut,
       tooltip_allow_when_suppressed = tooltip_allow_when_suppressed,
-      icon_size = icon_size})
+      icon_size = icon_size, horizontal_padding = 6})
     return node
   end
 
@@ -203,7 +203,7 @@ function playlist.new(services)
         mp.commandv(shuffled and "playlist-unshuffle" or "playlist-shuffle")
         playlist_state.shuffled = not shuffled
         render()
-      end, nil, true, 22)
+      end, nil, true, 28)
     node.loop = FooterButton("playlist-loop", "repeat", "Loop: off",
       function()
         local mode = (state.snapshot or {}).playlist_loop_mode or "off"
@@ -217,7 +217,7 @@ function playlist.new(services)
           mp.set_property("loop-file", "no")
           mp.set_property("loop-playlist", "no")
         end
-      end, nil, true, 22)
+      end, nil, true, 28)
 
     function node:update(snapshot, opacity, interactive, visible_rows)
       self.snapshot, self.opacity = snapshot, opacity
@@ -248,7 +248,7 @@ function playlist.new(services)
       local hover_alpha = alpha(self.opacity * 0.16)
       local selected_alpha = alpha(self.opacity * 0.30)
 
-      local footer_h, padding, footer_gap = dp(42), dp(8), dp(8)
+      local footer_h, padding, footer_gap = dp(43), dp(8), dp(8)
       local list_area = Rect({x = bounds.x + padding, y = bounds.y + padding,
         w = bounds.w - padding * 2,
         h = math.max(0, bounds.h - footer_h - padding - footer_gap)})
@@ -302,17 +302,17 @@ function playlist.new(services)
 
       local footer = Rect({x = bounds.x, y = bounds.y2 - footer_h,
         w = bounds.w, h = footer_h})
-      local button_size = dp(34)
-      local button_gap = dp(4)
-      local button_y = footer.y + dp(4)
-      local loop_x = footer.x2 - dp(39)
-      draw_rect(ass, footer.x + dp(12), footer.y, footer.x2 - dp(12),
+      local button_size = measure_node(self.loop, footer)
+      local button_gap = 0
+      local button_y = footer.y + dp(5)
+      local loop_x = footer.x2 - dp(5) - button_size.w
+      draw_rect(ass, footer.x, footer.y, footer.x2,
         footer.y + dp(1), "#FFFFFF", alpha(self.opacity * 0.16))
-      draw_node(self.shuffle, ass, Rect({x = loop_x - button_size - button_gap,
+      draw_node(self.shuffle, ass, Rect({x = loop_x - button_size.w - button_gap,
         y = button_y,
-        w = button_size, h = button_size}))
+        w = button_size.w, h = button_size.h}))
       draw_node(self.loop, ass, Rect({x = loop_x, y = button_y,
-        w = button_size, h = button_size}))
+        w = button_size.w, h = button_size.h}))
     end
     return node
   end
@@ -366,16 +366,20 @@ function playlist.new(services)
     function node:update(snapshot)
       self.snapshot = snapshot
       self.morph = clamp(playlist_state.animation.value, 0, 1)
+      if playlist_state.open then playlist_state.handoff = false end
       local content_progress = clamp((self.morph - 0.62) / 0.38, 0, 1)
       content_progress = content_progress * content_progress *
         (3 - 2 * content_progress)
       self.content_opacity = self.morph * content_progress
       self.interactive = playlist_state.open and self.morph > 0.9
-      local morphing = playlist_state.open or playlist_state.animation:is_running()
+      local morphing = playlist_state.open or
+        playlist_state.animation:is_running() or
+        playlist_state.width_animation:is_running() or
+        playlist_state.height_animation:is_running()
       self.backdrop.modifier.pointer_enabled = morphing
       self.content.modifier.pointer_enabled = morphing
       self.panel_width = math.max(dp(260), math.min(dp(380), state.viewport.w - dp(24)))
-      local row_h, panel_chrome = dp(52), dp(58)
+      local row_h, panel_chrome = dp(52), dp(59)
       local maximum_h = math.max(panel_chrome + row_h,
         math.min(dp(520), state.viewport.h - dp(24)))
       local maximum_rows = math.max(1, math.floor((maximum_h - panel_chrome) / row_h))
@@ -383,10 +387,10 @@ function playlist.new(services)
       local visible_rows = math.min(math.max(1, item_count), maximum_rows)
       self.panel_height = panel_chrome + visible_rows * row_h
       local target_width =
-        playlist_state.open and self.panel_width or dp(118)
+        playlist_state.open and self.panel_width or dp(134)
       local target_height =
         playlist_state.open and self.panel_height or dp(42)
-      if playlist_state.open or playlist_state.animation:is_running() then
+      if morphing then
         playlist_state.width_animation:set_target(target_width)
         playlist_state.height_animation:set_target(target_height)
       else
@@ -428,7 +432,7 @@ function playlist.new(services)
 
     local function control_metrics(bounds)
       local button = measure_node(node.playlist, bounds)
-      local gap, padding = dp(4), dp(4)
+      local gap, padding = 0, dp(4)
       return button.w, button.h,
         Rect({x = bounds.x, y = bounds.y,
           w = button.w * 3 + gap * 2 + padding * 2,
@@ -443,16 +447,20 @@ function playlist.new(services)
       for index, button in ipairs({node.playlist, node.previous, node.next}) do
         -- The pill and expanded footer share the same controls. Keep their
         -- horizontal centers fixed so opening only lifts them vertically.
-        local x = source.x + dp(4) + (index - 1) * dp(38)
+        local x = source.x + dp(4) +
+          (index - 1) * button_w
         draw_node(button, ass, Rect({x = x, y = y, w = button_w, h = button_h}))
       end
     end
 
     function node:draw(ass, bounds)
       local _, _, source = control_metrics(bounds)
+      local morphing = playlist_state.animation:is_running() or
+        playlist_state.width_animation:is_running() or
+        playlist_state.height_animation:is_running()
       if is_render_pass("interaction") then
         if self.morph == 0 and not playlist_state.open and
-          not playlist_state.animation:is_running() then
+          not morphing then
           draw_control_buttons(ass, source, source, 0)
         end
         return
@@ -460,7 +468,7 @@ function playlist.new(services)
       if not is_render_pass("base") then return end
       playlist_state.anchor_bounds = source
       if self.morph == 0 and not playlist_state.open and
-        not playlist_state.animation:is_running() then
+        not morphing then
         draw_box(ass, source.x, source.y, source.x2, source.y2,
           source.h / 2, "#050708", "58")
         draw_control_buttons(ass, source, source, 0)
@@ -474,15 +482,29 @@ function playlist.new(services)
     end
 
     function node:draw_expanded(ass, bounds)
+      local source = playlist_state.anchor_bounds or Rect({
+        x = bounds.x + dp(12), y = bounds.y2 - dp(54), w = dp(134), h = dp(42)
+      })
       if self.morph <= 0 and not playlist_state.open and
-        not playlist_state.animation:is_running() then
-        playlist_state.bounds, playlist_state.list_bounds = nil, nil
+        not playlist_state.animation:is_running() and
+        not playlist_state.width_animation:is_running() and
+        not playlist_state.height_animation:is_running() then
+        if not playlist_state.handoff then
+          -- The modal overlay is updated one frame before the retained base
+          -- layer. Keep an identical collapsed pill here for that handoff
+          -- frame; the queued full render replaces it without a blank flash.
+          playlist_state.handoff = true
+          draw_box(ass, source.x, source.y, source.x2, source.y2,
+            source.h / 2, "#050708", "58")
+          draw_control_buttons(ass, source, source, 0)
+        else
+          playlist_state.handoff = false
+          playlist_state.bounds, playlist_state.list_bounds = nil, nil
+        end
         return
       end
+      playlist_state.handoff = false
       draw_node(self.backdrop, ass, bounds)
-      local source = playlist_state.anchor_bounds or Rect({
-        x = bounds.x + dp(12), y = bounds.y2 - dp(54), w = dp(118), h = dp(42)
-      })
       local margin = dp(12)
       local target_x = clamp(source.x, bounds.x + margin,
         bounds.x2 - margin - self.panel_width)

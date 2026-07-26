@@ -282,7 +282,7 @@ function update_service.new(args)
         if installed then
           state.done = true
           state.scroll_index = 0
-          state.disable_auto_update = state.mode ~= "auto"
+          state.disable_auto_update = false
         else
           state.error = "Installation failed. " .. tostring(reason or "")
           msg.error("material-osc update installation failed: " .. tostring(reason or ""))

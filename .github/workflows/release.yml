@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           cp INSTALLATION.md release-body.md
-          printf '\n\n## What’s new\n\n' >> release-body.md
+          printf '\n\n## What\'s New\n\n' >> release-body.md
           cat "updates/$GITHUB_REF_NAME.txt" >> release-body.md
 
       - name: Create GitHub release

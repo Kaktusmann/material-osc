@@ -1683,10 +1683,10 @@ function popups.new(services)
 
   local function VideoSettingsPopup(on_back)
     local node = {
-      width = dp(380), height = dp(288), interactive = false,
+      width = dp(380), height = dp(332), interactive = false,
       panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
       hover_alpha = "00", crop = "", gamma = 0, brightness = 0,
-      saturation = 0, rotation = 0, shader_count = 0,
+      contrast = 0, saturation = 0, rotation = 0, shader_count = 0,
       keepaspect = true, panscan = 0,
       modifier = Modifier():clickable({
         name = "video-settings-panel", enabled = false, on_click = function() end
@@ -1698,6 +1698,7 @@ function popups.new(services)
       mp.set_property_number("panscan", 0)
       mp.set_property_number("gamma", 0)
       mp.set_property_number("brightness", 0)
+      mp.set_property_number("contrast", 0)
       mp.set_property_number("saturation", 0)
       mp.set_property_number("video-rotate", 0)
     end
@@ -1720,6 +1721,14 @@ function popups.new(services)
       end,
       function()
         mp.set_property_number("brightness", clamp(node.brightness + 5, -100, 100))
+      end)
+    node.contrast_row = SubtitleAdjustRow(
+      "video-settings-contrast", "Contrast",
+      function()
+        mp.set_property_number("contrast", clamp(node.contrast - 5, -100, 100))
+      end,
+      function()
+        mp.set_property_number("contrast", clamp(node.contrast + 5, -100, 100))
       end)
     node.saturation_row = SubtitleAdjustRow(
       "video-settings-saturation", "Saturation",
@@ -1750,6 +1759,8 @@ function popups.new(services)
       self.gamma_row:update(common)
       common.value = string.format("%+d", math.floor(self.brightness + 0.5))
       self.brightness_row:update(common)
+      common.value = string.format("%+d", math.floor(self.contrast + 0.5))
+      self.contrast_row:update(common)
       common.value = string.format("%+d", math.floor(self.saturation + 0.5))
       self.saturation_row:update(common)
       common.value = string.format("%d°", math.floor(self.rotation + 0.5) % 360)
@@ -1767,7 +1778,7 @@ function popups.new(services)
         w = bounds.w, h = dp(56)}))
       local rows = {
         {self.gamma_row, 44}, {self.brightness_row, 44},
-        {self.saturation_row, 44},
+        {self.contrast_row, 44}, {self.saturation_row, 44},
         {self.rotation_row, 44}, {self.shaders_row, 44}
       }
       local y = bounds.y + dp(60)
@@ -1989,6 +2000,7 @@ function popups.new(services)
         page_props.panscan = self.video_panscan
         page_props.gamma = self.video_gamma
         page_props.brightness = self.video_brightness
+        page_props.contrast = self.video_contrast
         page_props.saturation = self.video_saturation
         page_props.rotation = self.video_rotation
         page_props.shader_count = #self.shader_items
@@ -2166,7 +2178,7 @@ function popups.new(services)
           desired_h = dp(308)
         elseif settings_state.page == "speed" then desired_h = dp(190)
         elseif settings_state.page == "subtitle_style" then desired_h = dp(288)
-        elseif settings_state.page == "video_settings" then desired_h = dp(288)
+        elseif settings_state.page == "video_settings" then desired_h = dp(332)
         elseif settings_state.page == "video_crop" then desired_h = dp(164)
         elseif settings_state.page == "video_shaders" and item_count == 0 then
           desired_h = dp(116)
@@ -2241,6 +2253,7 @@ function popups.new(services)
         props.video_panscan = snapshot.video_panscan or 0
         props.video_gamma = snapshot.video_gamma or 0
         props.video_brightness = snapshot.video_brightness or 0
+        props.video_contrast = snapshot.video_contrast or 0
         props.video_saturation = snapshot.video_saturation or 0
         props.video_rotation = snapshot.video_rotation or 0
         props.shader_items = snapshot.shader_items or {}

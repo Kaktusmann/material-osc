@@ -15,6 +15,7 @@ function application_state.new(args)
     controller = {
       visible = opts.show_on_mouse_move,
       input_suppressed = false,
+      pointer_timed_out = false,
       hide_cursor_after_fade = false,
       bounds = nil
     },
@@ -55,6 +56,7 @@ function application_state.new(args)
     playlist = {
       open = false, scroll_index = 0, bounds = nil, list_bounds = nil,
       anchor_bounds = nil,
+      handoff = false,
       drag_from = nil, drag_to = nil, drag_start_y = nil,
       dragging_scroll = false,
       shuffled = false, shuffle_initialized = false,

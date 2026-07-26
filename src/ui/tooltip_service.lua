@@ -2,14 +2,14 @@ local tooltip_service = {}
 
 function tooltip_service.new(args)
   local state = args.runtime.tooltip
-  local delay = args.delay or 0.4
+  local delay = args.delay or 0.65
   local fade_duration = args.fade_duration or 0.14
 
   local service = {slide_distance = args.slide_distance or 18}
 
   function service:current_delay()
     local value = type(delay) == "function" and delay() or delay
-    return math.max(0, tonumber(value) or 0.4)
+    return math.max(0, tonumber(value) or 0.65)
   end
 
   function service:reset_hover()

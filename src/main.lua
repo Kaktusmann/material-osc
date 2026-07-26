@@ -245,7 +245,8 @@ local function create_app(services)
 
   visibility = function()
     local playlist_visible =
-      state.playlist.open or state.playlist.animation:is_running()
+      state.playlist.open or state.playlist.animation:is_running() or
+      state.playlist.bounds ~= nil or state.playlist.handoff
     local chapter_visible =
       state.chapter.open or state.chapter.animation.value > 0.001
     local settings_visible =
@@ -701,10 +702,7 @@ local keybinding_hints = keybinding_hints_module.new({
 local tooltip_service = tooltip_service_module.new({
   runtime = runtime, dp = dp, clamp = clamp,
   enabled = function() return opts.tooltip end,
-  delay = function()
-    local timeout = math.max(0, tonumber(opts.mouse_timeout) or 0)
-    return timeout > 0 and math.min(0.4, timeout * 0.4) or 0.2
-  end,
+  delay = 0.65,
   text_width = text_intrinsic_width,
   keybinding_hints = keybinding_hints
 })
@@ -848,6 +846,7 @@ end
 
 runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
+  context_menu_enabled = function() return opts.context_menu end,
   menu_keyboard = menu_keyboard,
   playback_indicator = playback_indicator,
   stream_quality = stream_quality,
@@ -1039,8 +1038,9 @@ options_update_handler = function(changed)
     services.config.max_volume_percentage = max_volume_percentage
     mp.set_property_number("volume-max", max_volume_percentage)
   end
-  if changed.context_menu and not opts.context_menu then
-    close_context_menu()
+  if changed.context_menu then
+    if not opts.context_menu then close_context_menu() end
+    runtime_host:set_context_menu_enabled(opts.context_menu)
   end
   if changed.force_hwdec or changed.force_display_resample or
     changed.force_force_window then

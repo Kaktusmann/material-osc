@@ -13,6 +13,7 @@ function controller.new(args)
     if runtime.controller.input_suppressed then
       visible = false
     end
+    if visible then runtime.controller.pointer_timed_out = false end
     local target = visible and 1 or 0
     if runtime.controller.visible == visible and
       runtime.controller.opacity.target == target then
@@ -62,10 +63,16 @@ function controller.new(args)
       end
       runtime.controller.hide_deadline = nil
       self:update_mouse()
-      if self:should_show_at_pointer() then
-        self:show()
-      else
-        self:animate_visibility(false)
+      if self:interaction_requires_visibility() then
+        self:arm_hide_timer()
+        return
+      end
+      runtime.controller.pointer_timed_out = true
+      if not self:animate_visibility(false) then
+        -- Edge feedback can be visible while the controller itself is
+        -- already hidden, so it still needs a frame to receive its new
+        -- timeout target.
+        args.render()
       end
     end
 
@@ -105,10 +112,11 @@ function controller.new(args)
     local pointer_active = runtime.pointer.x >= 0 and runtime.pointer.y >= 0
     if (opts.show_on_mouse_move and pointer_active) or self:should_show_at_pointer() then
       return self:show()
-    else
-      self:cancel_hide_timer()
-      return self:animate_visibility(false)
     end
+    local changed = self:animate_visibility(false)
+    if pointer_active then self:arm_hide_timer()
+    else self:cancel_hide_timer() end
+    return changed
   end
 
   function service:pointer_visual_feedback_changed()
@@ -149,6 +157,7 @@ function controller.new(args)
   function service:dispatch_mouse_move()
     runtime.timers.pointer_move = nil
     runtime.pointer.last_move_dispatch = mp.get_time()
+    runtime.controller.pointer_timed_out = false
     local cursor_timeout = math.max(100,
       math.floor(math.max(0, tonumber(opts.mouse_timeout) or 0) * 1000 + 0.5))
     args.set_cursor_autohide(cursor_timeout)
@@ -191,6 +200,7 @@ function controller.new(args)
       runtime.timers.pointer_move = nil
     end
     runtime.pointer.x, runtime.pointer.y = -1, -1
+    runtime.controller.pointer_timed_out = true
     runtime.pointer.last_move_dispatch = mp.get_time()
     args.thumbnail:clear()
     local rendered = self:sync_visibility_with_pointer()
@@ -205,6 +215,7 @@ function controller.new(args)
   end
 
   function service:on_primary_down()
+    runtime.controller.pointer_timed_out = false
     self:update_mouse()
     local _, box = args.hitbox_at_cursor()
     if box and box.on_press then
@@ -218,6 +229,7 @@ function controller.new(args)
   end
 
   function service:on_primary_double()
+    runtime.controller.pointer_timed_out = false
     self:update_mouse()
     local _, box = args.hitbox_at_cursor()
     if box and box.on_double then
@@ -276,6 +288,7 @@ function controller.new(args)
       return
     end
     if event and event.event == "down" then
+      runtime.controller.pointer_timed_out = false
       self:update_mouse()
       local name = args.hitbox_at_cursor()
       if name == "window-drag-area" then
@@ -295,6 +308,7 @@ function controller.new(args)
   end
 
   function service:on_secondary_down()
+    runtime.controller.pointer_timed_out = false
     self:update_mouse()
     if runtime.update.open then return end
     runtime.pointer.hover_hitbox = nil
@@ -342,7 +356,9 @@ function controller.new(args)
   end
 
   function service:on_wheel(direction)
+    runtime.controller.pointer_timed_out = false
     self:update_mouse()
+    self:arm_hide_timer()
     if self:scroll_open_dialog(direction) then return end
     local _, box = args.hitbox_at_cursor()
     local action = direction < 0 and box and box.on_scroll_up or box and box.on_scroll_down

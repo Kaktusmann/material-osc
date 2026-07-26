@@ -299,19 +299,48 @@ function controls.new(services)
       tooltip = "Toggle Remaining",
       modifier = Modifier():padding({
         horizontal = dp(10),
-        vertical = dp(4)
+        vertical = dp(6)
       }):clickable({
         name = "time-display",
         on_click = function()
           time_state.show_remaining = not time_state.show_remaining
           render()
         end
-      })
+      }):hoverIndication({inset = dp(4)})
     })
-    node.chapter_text = TextItem({text = ""})
-    node.chapter = Visibility({
-      visible = false,
-      modifier = Modifier():clickable({
+    node.chapter_text = TextItem({
+      text = ""
+    })
+    node.chapter_chevron = IconButton({
+      icon = "chevron_right",
+      size = 20,
+      icon_size = 20,
+      modifier = Modifier()
+    })
+    node.chapter_leading_space = {
+      modifier = Modifier(),
+      measure = function(self, parent)
+        return apply_modifier_size(self.modifier, {
+          w = dp(12),
+          h = dp(20)
+        }, parent)
+      end,
+      draw = function() end
+    }
+    node.chapter_content = Row({
+      gap = dp(4),
+      children = {
+        node.chapter_leading_space, node.chapter_text, node.chapter_chevron
+      },
+      modifier = Modifier():padding({
+        starting = dp(4),
+        ending = dp(8),
+        vertical = dp(6)
+      }):background({
+        color = "#050708",
+        alpha = "58",
+        shape = {kind = "rounded", percent = 50}
+      }):clickable({
         name = "chapter-display",
         on_click = function()
           local open = not chapter_state.open
@@ -321,11 +350,11 @@ function controls.new(services)
           end
           set_chapter_dialog_open(open)
         end
-      }),
-      child = Pill({
-        horizontal_padding = 8,
-        children = {node.chapter_text}
-      })
+      }):hoverIndication({inset = dp(4)})
+    })
+    node.chapter = Visibility({
+      visible = false,
+      child = node.chapter_content
     })
 
     local widest_digit = "0"
@@ -380,12 +409,13 @@ function controls.new(services)
 
     node.cached_time = TextItem({
       text = "0:00",
+      color = "#3C4043",
       render_pass = "dynamic",
       tooltip = "Cached Time",
       modifier = Modifier():padding({
         starting = dp(4),
-        ending = dp(8),
-        vertical = dp(4)
+        ending = dp(12),
+        vertical = dp(6)
       }):pointerArea({
         name = "cached-time",
         keyboard = false
@@ -411,7 +441,7 @@ function controls.new(services)
       }
     })
     node.subtitles = IconButton({name = "subtitles-button", icon = "subtitles",
-      tooltip = "Subtitles",
+      horizontal_padding = 6, tooltip = "Subtitles",
       shortcut = "subtitles",
       on_click = toggle_subtitles,
       on_scroll_up = function() cycle_subtitle(-1) end,
@@ -421,20 +451,21 @@ function controls.new(services)
       child = node.subtitles
     })
     node.screenshot = IconButton({name = "screenshot-button", icon = "photo_camera",
-      tooltip = "Take Screenshot",
+      horizontal_padding = 6, tooltip = "Take Screenshot",
       shortcut = "screenshot",
       on_click = function() mp.commandv("screenshot", "subtitles") end})
     node.settings = IconButton({name = "settings-button", icon = "settings",
-      tooltip = "Settings",
+      horizontal_padding = 6, tooltip = "Settings",
       shortcut = "open-settings",
       on_click = function()
         set_settings_dialog_open(not settings_state.open)
       end})
     node.fullscreen = IconButton({name = "fullscreen-button",
-      icon = "open_in_full", tooltip = "Fullscreen",
+      icon = "open_in_full", horizontal_padding = 6, tooltip = "Fullscreen",
       shortcut = "fullscreen",
       on_click = function() mp.commandv("cycle", "fullscreen") end})
     node.ending = Pill({
+      gap = 0,
       children = {
         node.subtitles_visibility, node.screenshot, node.settings, node.fullscreen
       },

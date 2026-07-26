@@ -141,7 +141,11 @@ function render_orchestrator.new(args)
     if full then
       for _, name in ipairs(args.navigation.dialogs) do
         local state = runtime[name]
-        if not state.open and state.animation.value == 0 then
+        local geometry_running = name == "playlist" and
+          (state.width_animation:is_running() or
+            state.height_animation:is_running())
+        if not state.open and state.animation.value == 0 and
+          not geometry_running then
           state.bounds = nil
           if name == "chapter" then state.dragging_scroll = false end
           if not state.hidden_notified then
@@ -159,9 +163,13 @@ function render_orchestrator.new(args)
         runtime.context_menu.bounds ~= nil
       for _, name in ipairs(args.navigation.dialogs) do
         local state = runtime[name]
+        local geometry_running = name == "playlist" and
+          (state.width_animation:is_running() or
+            state.height_animation:is_running())
         needs_cleanup = needs_cleanup or
           (not state.open and not state.animation:is_running() and
-            state.animation.value == 0 and state.bounds ~= nil)
+            state.animation.value == 0 and not geometry_running and
+            state.bounds ~= nil)
       end
       if needs_cleanup then queue_request("full") end
     end

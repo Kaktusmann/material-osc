@@ -264,6 +264,7 @@ function snapshot.reader(deps)
       video_panscan = property_number("panscan", 0) or 0,
       video_gamma = property_number("gamma", 0) or 0,
       video_brightness = property_number("brightness", 0) or 0,
+      video_contrast = property_number("contrast", 0) or 0,
       video_saturation = property_number("saturation", 0) or 0,
       video_rotation = property_number("video-rotate", 0) or 0,
       shader_items = shader_items,
