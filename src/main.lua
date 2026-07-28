@@ -129,9 +129,21 @@ mp.add_hook("on_load", 5, function()
     manual_stream_quality_reload = false
     return
   end
-  if opts.youtube_quality == "auto" then return end
   local path = mp.get_property("stream-open-filename", "") or
     mp.get_property("path", "") or ""
+  if stream_quality_module.is_youtube_playlist(path) then
+    local raw_options = mp.get_property_native("ytdl-raw-options") or {}
+    if type(raw_options) ~= "table" then raw_options = {} end
+    -- Preserve an explicit opt-out from mpv.conf or the command line.
+    if raw_options["no-playlist"] == nil then
+      local local_options = {}
+      for key, value in pairs(raw_options) do local_options[key] = value end
+      local_options["yes-playlist"] = ""
+      mp.set_property_native(
+        "file-local-options/ytdl-raw-options", local_options)
+    end
+  end
+  if opts.youtube_quality == "auto" then return end
   if not stream_quality_module.supports_youtube(path) then return end
   local quality = opts.youtube_quality
   local format = "bestvideo[height<=" .. quality ..

@@ -21,6 +21,28 @@ TEXT_FONT = "GoogleSansFlex.ttf"
 OUTPUT_SYMBOL_FONT = "material-osc_icons.otf"
 OUTPUT_TEXT_FONT = "material-osc_google_sans_flex.ttf"
 LUA_STRING = re.compile(r'''["']([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)?)["']''')
+LUA_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+LUA_NUMBER = re.compile(
+    r"""
+    (?:
+        0[xX](?:
+            [0-9A-Fa-f]+(?:\.[0-9A-Fa-f]*)?
+            |\.[0-9A-Fa-f]+
+        )(?:[pP][+-]?[0-9]+)?
+        |
+        (?:
+            [0-9]+\.[0-9]*
+            |\.[0-9]+
+            |[0-9]+
+        )(?:[eE][+-]?[0-9]+)?
+    )
+    """,
+    re.VERBOSE,
+)
+LUA_OPERATORS = ("...", "..", "==", "~=", "<=", ">=", "::", "//", "<<", ">>")
+AMBIGUOUS_SYMBOL_BOUNDARIES = {
+    "--", "..", "==", "~=", "<=", ">=", "::", "//", "<<", ">>", "[["
+}
 
 
 def module_name(path: Path, source_dir: Path) -> str:
@@ -65,6 +87,121 @@ def build_bundle(source_dir: Path, entry_file: Path) -> tuple[str, int]:
 
     sections.extend((ENTRY_MARKER, entry_point.rstrip(), ""))
     return "\n".join(sections), len(lua_files)
+
+
+def long_bracket_level(source: str, start: int) -> int | None:
+    """Return the equals-sign count for a Lua long bracket at start."""
+    if start >= len(source) or source[start] != "[":
+        return None
+    cursor = start + 1
+    while cursor < len(source) and source[cursor] == "=":
+        cursor += 1
+    if cursor < len(source) and source[cursor] == "[":
+        return cursor - start - 1
+    return None
+
+
+def read_long_bracket(source: str, start: int, level: int) -> int:
+    closing = "]" + ("=" * level) + "]"
+    end = source.find(closing, start + level + 2)
+    if end < 0:
+        raise ValueError(f"Unterminated Lua long bracket at offset {start}")
+    return end + len(closing)
+
+
+def tokenize_lua(source: str) -> list[tuple[str, str]]:
+    """Tokenize enough of Lua to safely remove comments and whitespace."""
+    tokens: list[tuple[str, str]] = []
+    cursor = 0
+    length = len(source)
+
+    while cursor < length:
+        character = source[cursor]
+        if character.isspace():
+            cursor += 1
+            continue
+
+        if source.startswith("--", cursor):
+            level = long_bracket_level(source, cursor + 2)
+            if level is not None:
+                cursor = read_long_bracket(source, cursor + 2, level)
+            else:
+                newline = source.find("\n", cursor + 2)
+                cursor = length if newline < 0 else newline + 1
+            continue
+
+        if character in {'"', "'"}:
+            quote = character
+            end = cursor + 1
+            while end < length:
+                if source[end] == "\\":
+                    end += 2
+                elif source[end] == quote:
+                    end += 1
+                    break
+                else:
+                    end += 1
+            else:
+                raise ValueError(f"Unterminated Lua string at offset {cursor}")
+            tokens.append(("string", source[cursor:end]))
+            cursor = end
+            continue
+
+        level = long_bracket_level(source, cursor)
+        if level is not None:
+            end = read_long_bracket(source, cursor, level)
+            tokens.append(("string", source[cursor:end]))
+            cursor = end
+            continue
+
+        identifier = LUA_IDENTIFIER.match(source, cursor)
+        if identifier:
+            tokens.append(("word", identifier.group(0)))
+            cursor = identifier.end()
+            continue
+
+        number = LUA_NUMBER.match(source, cursor)
+        if number:
+            tokens.append(("number", number.group(0)))
+            cursor = number.end()
+            continue
+
+        operator = next(
+            (value for value in LUA_OPERATORS if source.startswith(value, cursor)),
+            character,
+        )
+        tokens.append(("symbol", operator))
+        cursor += len(operator)
+
+    return tokens
+
+
+def tokens_need_separator(
+    previous: tuple[str, str], current: tuple[str, str]
+) -> bool:
+    previous_kind, previous_text = previous
+    current_kind, current_text = current
+    if previous_kind in {"word", "number"} and current_kind in {"word", "number"}:
+        return True
+    if previous_kind == "number" and current_text.startswith("."):
+        return True
+    if previous_kind == "symbol" and current_kind == "symbol":
+        return previous_text[-1] + current_text[0] in AMBIGUOUS_SYMBOL_BOUNDARIES
+    return False
+
+
+def minify_lua(source: str) -> str:
+    """Remove Lua comments and unnecessary whitespace without renaming symbols."""
+    tokens = tokenize_lua(source)
+    if not tokens:
+        return ""
+
+    output = [tokens[0][1]]
+    for previous, current in zip(tokens, tokens[1:]):
+        if tokens_need_separator(previous, current):
+            output.append(" ")
+        output.append(current[1])
+    return "".join(output)
 
 
 def embed_version(bundle: str, version: str) -> str:
@@ -165,6 +302,9 @@ def main() -> None:
 
     bundle, module_count = build_bundle(source_dir, ENTRY_FILE)
     bundle = embed_version(bundle, args.version)
+    unminified_size = len(bundle.encode("utf-8"))
+    bundle = GENERATED_HEADER + "\n" + minify_lua(bundle)
+    minified_size = len(bundle.encode("utf-8"))
     output.write_text(bundle, encoding="utf-8", newline="\n")
 
     legacy_script = destination / "material-osc.lua"
@@ -179,6 +319,10 @@ def main() -> None:
     print(
         f"Built material-osc {args.version} with {module_count} modules and "
         f"{icon_count} icons in {destination}"
+    )
+    print(
+        f"Minified material-osc.lua: {unminified_size // 1024} KiB -> "
+        f"{minified_size // 1024} KiB"
     )
     print(
         f"Subset {SYMBOL_FONT}: {source_font_size // 1024} KiB -> "

@@ -68,6 +68,11 @@ function controller.new(args)
         return
       end
       runtime.controller.pointer_timed_out = true
+      -- Pointer-only feedback (such as edge seek) can be visible while the
+      -- controller is already hidden. In that case animate_visibility(false)
+      -- has no visibility transition from which to schedule cursor hiding, so
+      -- make the idle deadline authoritative for every part of the viewport.
+      runtime.controller.hide_cursor_after_fade = true
       if not self:animate_visibility(false) then
         -- Edge feedback can be visible while the controller itself is
         -- already hidden, so it still needs a frame to receive its new

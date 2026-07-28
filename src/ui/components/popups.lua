@@ -1409,7 +1409,7 @@ function popups.new(services)
     local function reset_subtitle_style()
       mp.set_property_number("sub-delay", 0)
       mp.set_property_number("sub-font-size", 38)
-      mp.set_property_number("sub-border-size", 1.65)
+      mp.set_property_number("sub-outline-size", 1.65)
       mp.set_property("sub-color", "#FFFFFFFF")
       mp.set_property("sub-font", "sans-serif")
     end
@@ -1435,10 +1435,10 @@ function popups.new(services)
       end)
     node.border = SubtitleAdjustRow("subtitle-border", "Border",
       function()
-        mp.set_property_number("sub-border-size", clamp(node.border_size - 0.5, 0, 10))
+        mp.set_property_number("sub-outline-size", clamp(node.border_size - 0.5, 0, 10))
       end,
       function()
-        mp.set_property_number("sub-border-size", clamp(node.border_size + 0.5, 0, 10))
+        mp.set_property_number("sub-outline-size", clamp(node.border_size + 0.5, 0, 10))
       end)
     node.color_row = SubtitleAdjustRow("subtitle-color", "Color",
       function()

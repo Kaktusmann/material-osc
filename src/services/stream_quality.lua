@@ -92,7 +92,8 @@ local youtube_module = require "src.services.ytdl_service"
 
 local stream_quality = {
   quality_label = youtube_module.quality_label,
-  supports_youtube = youtube_module.supports
+  supports_youtube = youtube_module.supports,
+  is_youtube_playlist = youtube_module.is_playlist_url
 }
 
 function stream_quality.new(args)

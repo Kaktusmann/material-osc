@@ -43,6 +43,10 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 
 </details>
 
+YouTube watch links containing a `list` parameter load the full playlist and
+start at the linked video. To keep mpv's single-video behavior, explicitly set
+`ytdl-raw-options=no-playlist=` in `mpv.conf`.
+
 ### Window controls
 
 With `window_controls=auto`, material-osc provides minimize, maximize/restore, and
@@ -65,8 +69,9 @@ network=yes
 
 The repository keeps the complete Material Symbols Rounded TTF for development.
 Release builds automatically subset it to the icons referenced by the Lua sources.
-The generated archive places renamed fonts under `fonts/` and the bundled Lua
-script under `scripts/`, ready to extract into the mpv configuration directory.
+The generated archive places renamed fonts under `fonts/` and the minified,
+bundled Lua script under `scripts/`, ready to extract into the mpv configuration
+directory.
 
 ```bash
 python -m venv .venv

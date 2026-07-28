@@ -23,15 +23,25 @@ function ytdl_service.supports(url)
     host:match("%.youtube%-nocookie%.com$") ~= nil
 end
 
+function ytdl_service.is_playlist_url(url)
+  if not ytdl_service.supports(url) then return false end
+  return url:match("[?&]list=[^&#]+") ~= nil
+end
+
 local function append_raw_options(command)
   local options = mp.get_property_native("ytdl-raw-options") or {}
   if type(options) ~= "table" then return end
   for key, value in pairs(options) do
-    if value == true or value == "" then
-      command[#command + 1] = "--" .. tostring(key)
-    elseif value ~= false and value ~= nil then
-      command[#command + 1] = "--" .. tostring(key)
-      command[#command + 1] = tostring(value)
+    -- The quality probe always targets the current video. In particular,
+    -- ignore material-osc's per-file yes-playlist option so the result still
+    -- contains the video's formats rather than a playlist's entries.
+    if key ~= "yes-playlist" and key ~= "no-playlist" then
+      if value == true or value == "" then
+        command[#command + 1] = "--" .. tostring(key)
+      elseif value ~= false and value ~= nil then
+        command[#command + 1] = "--" .. tostring(key)
+        command[#command + 1] = tostring(value)
+      end
     end
   end
 end

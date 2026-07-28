@@ -256,7 +256,7 @@ function snapshot.reader(deps)
         property_native("secondary-sub-visibility") ~= false,
       subtitle_delay = property_number("sub-delay", 0) or 0,
       subtitle_font_size = property_number("sub-font-size", 38) or 38,
-      subtitle_border_size = property_number("sub-border-size", 1.65) or 1.65,
+      subtitle_border_size = property_number("sub-outline-size", 1.65) or 1.65,
       subtitle_color = property("sub-color", "#FFFFFFFF") or "#FFFFFFFF",
       subtitle_font = property("sub-font", "sans-serif") or "sans-serif",
       video_crop = property("video-crop", "") or "",
