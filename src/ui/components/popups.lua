@@ -1095,10 +1095,9 @@ function popups.new(services)
       mp.set_property_number("speed", stepped_speed(node.speed + amount))
     end
     local function speed_at_pointer(box)
-      return stepped_speed(speed_min +
-        clamp((pointer.x - box.x1) / box.w, 0, 1) *
-          (speed_max - speed_min))
-    end
+  local raw_speed = speed_min + clamp((pointer.x - box.x1) / box.w, 0, 1) * (speed_max - speed_min)
+  return clamp(math.floor(raw_speed * 100 + 0.5) / 100, speed_min, speed_max)
+end
     node.header = ChapterHeader(on_back, "Playback Speed", "arrow_back", {
       name = "playback-speed-temporary",
       icon = "bolt_boost",
