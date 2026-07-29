@@ -231,11 +231,21 @@ function context_actions.new(args)
 
   function service:items(snapshot)
     local items = {}
-    local network = snapshot.network or is_url(media_path())
     local function item(label, icon, action)
       items[#items + 1] = {label = label, icon = icon, action = action}
     end
     local function separator() items[#items + 1] = {separator = true} end
+    local function add_settings_items()
+      item("Keybindings", "keyboard", function() self:open_keybindings() end)
+      item("Configurations", "settings",
+        function() self:open_configurations() end)
+    end
+    if (snapshot.playlist_count or 0) == 0 then
+      add_settings_items()
+      return items
+    end
+
+    local network = snapshot.network or is_url(media_path())
     if type(snapshot.subtitle_text) == "string" and
       snapshot.subtitle_text:match("%S") then
       item("Copy Subtitle Text", "subtitles", function()
@@ -266,8 +276,7 @@ function context_actions.new(args)
         self:open_media(snapshot)
       end)
     separator()
-    item("Keybindings", "keyboard", function() self:open_keybindings() end)
-    item("Configurations", "settings", function() self:open_configurations() end)
+    add_settings_items()
     return items
   end
 

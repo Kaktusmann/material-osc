@@ -221,13 +221,24 @@ function renderer.new(args)
   end
 
   function service:draw_text(ass, x, y, value, size, color, alpha, font, alignment,
-      bold, ignore_controller_fade, clip_bounds)
+      bold, ignore_controller_fade, clip_bounds, style)
     ass:new_event(); ass:pos(x, y); ass:an(alignment or 5)
     local rendered_alpha = ignore_controller_fade and (alpha or "00") or
       self:fade_alpha(alpha)
-    ass:append(string.format("{\\bord0\\shad0\\fs%d\\fn%s%s\\1c&H%s&\\1a&H%s&}",
+    local weight = style and style.weight or bold
+    local font_weight = type(weight) == "number" and
+      string.format("\\b%d", weight) or (weight and "\\b1" or "")
+    local x_scale = style and tonumber(style.x_scale)
+    local shear = style and tonumber(style.shear)
+    local rotation = style and tonumber(style.rotation)
+    local typography = (x_scale and string.format("\\fscx%.2f", x_scale) or "") ..
+      (shear and string.format("\\fax%.3f", shear) or "") ..
+      (rotation and string.format("\\frz%.2f", rotation) or "") ..
+      (style and style.no_wrap and "\\q2" or "")
+    ass:append(string.format(
+      "{\\bord0\\shad0\\fs%d\\fn%s%s%s\\1c&H%s&\\1a&H%s&}",
       self:scale_font(size or 22), font or self.default_text_font,
-      bold and "\\b1" or "", self:ass_color(color or "#FFFFFF"),
+      font_weight, typography, self:ass_color(color or "#FFFFFF"),
       rendered_alpha))
     append_clip(ass, clip_bounds)
     ass:append(escape_ass(value))
@@ -237,12 +248,16 @@ function renderer.new(args)
     local text_size = self:scale_font(size or 22)
     local text_font = font or self.default_text_font
     local escaped_value = escape_ass(value)
+    local text_opacity = 1 -
+      (tonumber(alpha or "00", 16) or 0) / 255
+    local shadow_alpha = self:fade_alpha(
+      self:alpha(text_opacity * (1 - 0x58 / 255)))
     ass:new_event()
     ass:pos(x + self:dp(1.2), y + self:dp(1.5))
     ass:an(alignment or 5)
     ass:append(string.format(
       "{\\bord1.4\\blur4\\shad0\\fs%d\\fn%s\\1c&H000000&\\3c&H000000&\\1a&H%s&\\3a&H%s&}",
-      text_size, text_font, self:fade_alpha("58"), self:fade_alpha("58")))
+      text_size, text_font, shadow_alpha, shadow_alpha))
     append_clip(ass)
     ass:append(escaped_value)
     self:draw_text(ass, x, y, value, size, color, alpha, font, alignment)

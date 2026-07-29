@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="material-osc logo" width="128">
+</p>
+
 # material-osc
 
 A quality-of-life upgrade for mpv that keeps the player lightweight while
@@ -33,8 +37,8 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
 | `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
 | `youtube_quality` | `auto` | `auto` or a vertical resolution such as `1080` | Sets the maximum quality used when initially loading YouTube videos. `auto` preserves mpv's configured `ytdl-format`. |
-| `force_hwdec` | `yes` | `yes`, `no` | Enables mpv's safe automatic hardware decoding. With `no`, material-osc preserves the configured `hwdec` value. |
-| `force_display_resample` | `yes` | `yes`, `no` | Uses `video-sync=display-resample` for smoother UI motion. With `no`, material-osc preserves the configured `video-sync` value. |
+| `force_hwdec` | `no` | `yes`, `no` | With `no`, preserves mpv's configured `hwdec` value. Set to `yes` to opt into `hwdec=auto`; this may be unstable with some live streams and hybrid-GPU systems. |
+| `force_display_resample` | `yes` | `yes`, `no` | With `no`, preserves mpv's configured `video-sync` value. Set to `yes` to opt into `video-sync=display-resample`. |
 | `force_force_window` | `yes` | `yes`, `no` | Keeps an mpv window open even before a file is loaded. With `no`, material-osc preserves the configured `force-window` value. |
 | `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. |
 | `temporary_speed` | `2` | Playback rate greater than `0` | Sets the speed used while the `hold-double-speed` binding is held. |
@@ -70,7 +74,8 @@ network=yes
 The repository keeps the complete Material Symbols Rounded TTF for development.
 Release builds automatically subset it to the icons referenced by the Lua sources.
 The generated archive places renamed fonts under `fonts/` and the minified,
-bundled Lua script under `scripts/`, ready to extract into the mpv configuration
+bundled Lua script under `scripts/`. The brand mark is implemented as a bundled
+ASS drawing, so the archive is ready to extract into the mpv configuration
 directory.
 
 ```bash

@@ -1,28 +1,17 @@
 local subtitle_position = {}
 
-local function contains(values, wanted)
-  for _, value in ipairs(values or {}) do
-    if value == wanted then return true end
-  end
-  return false
-end
-
 function subtitle_position.new(args)
   local mp = args.mp
+  local property = "sub-pos"
   local offset_animation = args.animation.spring({
     initial = 0,
     stiffness = args.spring_stiffness or 420,
     damping = args.spring_damping or 32,
     clock = function() return mp.get_time() end
   })
-  local offset_property = "sub-margin-y-offset"
-  local has_offset_property = contains(
-    mp.get_property_native("property-list", {}), offset_property)
-  local property = has_offset_property and offset_property or "sub-pos"
-  local baseline = mp.get_property_number(property, 0) or 0
   local service = {
     property = property,
-    baseline = baseline,
+    baseline = mp.get_property_number(property, 100) or 100,
     last_value = nil,
     last_margin = nil,
     offset_animation = offset_animation,
@@ -33,8 +22,8 @@ function subtitle_position.new(args)
     value = math.floor(value * 100 + 0.5) / 100
     if service.last_value ~= nil and
       math.abs(service.last_value - value) < 0.005 then return end
-    mp.set_property_number(property, value)
     service.last_value = value
+    mp.set_property_number(property, value)
   end
 
   local function publish_margin(bottom)
@@ -46,6 +35,16 @@ function subtitle_position.new(args)
     })
     service.last_margin = bottom
   end
+
+  local function observe_position(_, value)
+    value = tonumber(value)
+    if value == nil then return end
+    if service.last_value == nil or
+      math.abs(value - service.last_value) >= 0.01 then
+      service.baseline = value
+    end
+  end
+  mp.observe_property(property, "native", observe_position)
 
   function service:update(controller_height, visibility_target, viewport_height,
       now)
@@ -61,17 +60,15 @@ function subtitle_position.new(args)
     local occupied_pixels = self.offset_animation.value
     publish_margin(occupied_pixels / viewport_height)
 
-    local value = baseline
-    if mp.get_property("sub-align-y", "bottom") == "bottom" then
-      if has_offset_property then
-        local offset = occupied_pixels
-        if mp.get_property_native("sub-scale-by-window") ~= false then
-          offset = offset * 720 / viewport_height
-        end
-        value = baseline + offset
-      else
-        value = baseline - occupied_pixels * 100 / viewport_height
-      end
+    local value = self.baseline
+    local sid = mp.get_property_native("sid")
+    local subtitle_selected =
+      sid ~= nil and sid ~= false and sid ~= "no" and sid ~= 0
+    if subtitle_selected and
+      mp.get_property("sub-align-y", "bottom") == "bottom" then
+      local adjusted = math.max(
+        0, 100 - occupied_pixels * 100 / viewport_height)
+      if self.baseline >= adjusted then value = adjusted end
     end
     set_number(value)
   end
@@ -81,10 +78,11 @@ function subtitle_position.new(args)
   end
 
   function service:dispose()
+    mp.unobserve_property(observe_position)
     local current = mp.get_property_number(property)
     if self.last_value == nil or current == nil or
       math.abs(current - self.last_value) < 0.01 then
-      mp.set_property_number(property, baseline)
+      mp.set_property_number(property, self.baseline)
     end
     mp.set_property_native("user-data/osc/margins", {
       l = 0, r = 0, t = 0, b = 0

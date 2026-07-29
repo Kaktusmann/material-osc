@@ -7,7 +7,7 @@ local opts = {
   show_mini_seekbar = false,
   window_controls = "auto",
   youtube_quality = "auto",
-  force_hwdec = true,
+  force_hwdec = false,
   force_display_resample = true,
   force_force_window = true,
   directory_playlist = true,
@@ -102,6 +102,7 @@ local temporary_speed_indicator_module =
   require "src.ui.components.temporary_speed_indicator"
 local edge_seek_module = require "src.ui.components.edge_seek"
 local seekbar_renderer_module = require "src.ui.components.seekbar_renderer"
+local brand_logo_module = require "src.ui.brand_logo"
 local loading_indicator = require "src.ui.loading_indicator"
 local ui_renderer_module = require "src.ui.renderer"
 local text_metrics_module = require "src.ui.text_metrics"
@@ -112,6 +113,7 @@ local assets = require "src.services.assets"
 local player_module = require "src.services.player"
 local directory_playlist_module = require "src.services.directory_playlist"
 local stream_quality_module = require "src.services.stream_quality"
+local media_loader_module = require "src.services.media_loader"
 local subtitle_loader_module = require "src.services.subtitle_loader"
 local shader_loader_module = require "src.services.shader_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
@@ -155,6 +157,7 @@ mp.set_property("osc", "no")
 mp.set_property_bool("auto-window-resize", false)
 
 local controls_module = require "src.ui.components.controls"
+local empty_state_module = require "src.ui.components.empty_state"
 local popups_module = require "src.ui.components.popups"
 local playlist_module = require "src.ui.components.playlist"
 
@@ -167,6 +170,7 @@ local function create_app(services)
     snapshot_revision = nil
   }
   node.video = controls.VideoSurface()
+  node.empty_state = empty_state_module.new(services)
   node.playlist_controls = playlist_module.new(services)
   node.seekbar = controls.SeekBar()
   node.controls = controls.ControlsRow()
@@ -200,6 +204,9 @@ local function create_app(services)
     if static_changed then self.window_controls:update(snapshot) end
     if static_changed or state.playlist.open or
       state.playlist.animation:is_running() or
+      state.playlist.controls_opacity:is_running() or
+      self.playlist_controls.controls_opacity ~=
+        state.playlist.controls_opacity.value or
       state.playlist.width_animation:is_running() or
       state.playlist.height_animation:is_running() then
       self.playlist_controls:update(snapshot)
@@ -214,7 +221,9 @@ local function create_app(services)
       state.playlist.animation:is_running() or
       state.chapter.open or state.chapter.animation.value > 0.001 or
       state.settings.open or state.settings.animation.value > 0.001
-    self.tooltip:set_suppressed(state.controller.opacity.value <= 0 or modal)
+    self.empty_state:update(self.empty_visible, self.empty_visible and not modal)
+    self.tooltip:set_suppressed(
+      self.empty_visible or state.controller.opacity.value <= 0 or modal)
     self.chapter:update(snapshot)
     self.settings:update(snapshot)
     if context_visible then self.context_menu:update(snapshot) end
@@ -223,7 +232,8 @@ local function create_app(services)
   end
 
   function node:update_video_presence(snapshot)
-    if snapshot.video_present or state.media.loading then
+    self.empty_visible = (snapshot.playlist_count or 0) == 0
+    if self.empty_visible or snapshot.video_present or state.media.loading then
       self.no_video_since = nil
       self.no_video_opacity = 0
     else
@@ -242,7 +252,10 @@ local function create_app(services)
     self:update_dynamic(snapshot)
     local playlist_visible, chapter_visible, settings_visible, context_visible =
       visibility()
-    if playlist_visible or state.playlist.width_animation:is_running() or
+    if playlist_visible or state.playlist.controls_opacity:is_running() or
+      self.playlist_controls.controls_opacity ~=
+        state.playlist.controls_opacity.value or
+      state.playlist.width_animation:is_running() or
       state.playlist.height_animation:is_running() then
       self.playlist_controls:update(snapshot)
     end
@@ -251,7 +264,9 @@ local function create_app(services)
     if context_visible then self.context_menu:update(snapshot, false) end
     local modal = state.update.open or playlist_visible or chapter_visible or
       settings_visible or context_visible
-    self.tooltip:set_suppressed(state.controller.opacity.value <= 0 or modal)
+    self.empty_state:update(self.empty_visible, self.empty_visible and not modal)
+    self.tooltip:set_suppressed(
+      self.empty_visible or state.controller.opacity.value <= 0 or modal)
     if state.update.open then self.update_dialog:update(snapshot) end
   end
 
@@ -282,7 +297,10 @@ local function create_app(services)
   end
 
   function node:draw_base(ass, root)
-    ui.draw_node(self.video, ass, root)
+    if not self.empty_visible then
+      ui.draw_node(self.video, ass, root)
+    end
+    ui.draw_node(self.empty_state, ass, root)
     local playlist_visible, chapter_visible, settings_visible, context_visible =
       visibility()
     local pointer_x, pointer_y = state.pointer.x, state.pointer.y
@@ -291,7 +309,11 @@ local function create_app(services)
       state.pointer.x, state.pointer.y = -1, -1
     end
 
-    if state.controller.opacity.value > 0 then
+    if self.empty_visible then
+      state.controller.bounds = nil
+      state.volume.popup_bounds, state.volume.button_bounds = nil, nil
+      state.edge_seek.left.bounds, state.edge_seek.right.bounds = nil, nil
+    elseif state.controller.opacity.value > 0 then
       state.controller.bounds = ui.draw_node(self.controller, ass, root)
     else
       local size = ui.measure_node(self.controller, root)
@@ -328,6 +350,10 @@ local function create_app(services)
   end
 
   function node:draw_dynamic(ass, root)
+    if self.empty_visible then
+      ui.draw_node(self.empty_state, ass, root)
+      return
+    end
     if opts.show_mini_seekbar then
       local duration = state.snapshot.duration or 0
       local opacity = 1 - ui.clamp(state.controller.opacity.value, 0, 1)
@@ -364,22 +390,26 @@ local function create_app(services)
       state.pointer.x, state.pointer.y = -1, -1
     end
     if state.controller.opacity.value > 0 then
-      ui.draw_node(self.controller, ass, root)
+      if not self.empty_visible then
+        ui.draw_node(self.controller, ass, root)
+      end
       if state.window_controls.bounds then
         ui.draw_node(self.window_controls, ass, root)
       end
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
-    if volume_owns_pointer and not modal_open then
+    if not self.empty_visible and volume_owns_pointer and not modal_open then
       self.controls:draw_volume_interaction(ass)
     end
 
-    if self.no_video_opacity > 0 then
+    if not self.empty_visible and self.no_video_opacity > 0 then
       local icon_size = math.min(root.w, root.h) * 0.34 / ui.dp(1)
       services.ui.draw_icon(ass, root.x + root.w / 2, root.y + root.h / 2,
         "music_note_2", "#FFFFFF", icon_size,
         services.ui.alpha(self.no_video_opacity), true)
     end
+    ui.draw_node(self.empty_state, ass, root)
+    if self.empty_visible then return end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
     self.edge_seek:draw(ass, root)
@@ -401,7 +431,7 @@ local function create_app(services)
     if state.update.open then ui.draw_node(self.update_dialog, ass, root) end
     state.input.drawing_keyboard_focus = false
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
-    self.temporary_speed:draw(ass, root)
+    if not self.empty_visible then self.temporary_speed:draw(ass, root) end
     -- Tooltips must be composed after modal content so popup controls can
     -- request them and the resulting surface stays visually above the popup.
     ui.draw_node(self.tooltip, ass, root)
@@ -415,22 +445,26 @@ local function create_app(services)
   end
 
   function node:needs_continuous_render()
-    return self.no_video_since ~= nil and self.no_video_opacity < 0.66
+    return self.empty_visible or
+      (self.no_video_since ~= nil and self.no_video_opacity < 0.66)
   end
 
   function node:has_visible_overlay()
-    if opts.show_mini_seekbar and (state.snapshot.duration or 0) > 0 and
+    if not self.empty_visible and opts.show_mini_seekbar and
+      (state.snapshot.duration or 0) > 0 and
       state.controller.opacity.value < 0.999 then
       return true
     end
-    if state.snapshot.buffering or self.no_video_opacity > 0 or
-      state.controller.opacity.value > 0.001 or
-      state.playback_indicator.opacity.value > 0.001 or
-      state.edge_seek.left.opacity.value > 0.001 or
-      state.edge_seek.right.opacity.value > 0.001 or
+    if state.snapshot.buffering or self.empty_visible or
+      self.no_video_opacity > 0 or
+      (not self.empty_visible and (
+        state.controller.opacity.value > 0.001 or
+        state.playback_indicator.opacity.value > 0.001 or
+        state.edge_seek.left.opacity.value > 0.001 or
+        state.edge_seek.right.opacity.value > 0.001)) or
       state.tooltip.opacity.value > 0.001 or state.update.open or
-      state.temporary_speed.active or
-      self.media_information_close.visible then
+      (not self.empty_visible and (
+        state.temporary_speed.active or self.media_information_close.visible)) then
       return true
     end
     if state.context_menu.open or state.context_menu.pending_x ~= nil or
@@ -613,6 +647,9 @@ local shader_loader = shader_loader_module.new({
   mp = mp, utils = utils, msg = msg,
   render = function(...) return render(...) end
 })
+local media_loader = media_loader_module.new({
+  render = function(...) return render(...) end
+})
 
 local controller
 local bookmark_service = bookmark_service_module.new({
@@ -668,6 +705,10 @@ local draw_boxes = function(...) return ui_renderer:draw_boxes(...) end
 local draw_text = function(...) return ui_renderer:draw_text(...) end
 local draw_shadowed_text = function(...) return ui_renderer:draw_shadowed_text(...) end
 local draw_icon = function(...) return ui_renderer:draw_icon(...) end
+local draw_brand_logo = brand_logo_module.new({
+  ass_color = function(color) return ui_renderer:ass_color(color) end,
+  fade_alpha = function(value) return ui_renderer:fade_alpha(value) end
+})
 
 local draw_loading_shape_morph = loading_indicator.new({
   started_ms = function() return runtime.loading.started_ms end,
@@ -764,11 +805,13 @@ local services = {
   },
   ui = {
     dp = dp, clamp = clamp, smooth_step = smooth_step, lerp = lerp,
+    now = function() return mp.get_time() end,
     dpi_scale = function() return ui_renderer:dpi_scale() end,
     edge_seek_top_inset = edge_seek_top_inset,
     alpha = ass_alpha_for_opacity, draw_rect = draw_rect, draw_box = draw_box,
     draw_round_box = draw_round_box,
-    draw_icon = draw_icon, draw_text = draw_text, draw_seekbar = draw_seekbar,
+    draw_icon = draw_icon, draw_brand_logo = draw_brand_logo,
+    draw_text = draw_text, draw_seekbar = draw_seekbar,
     draw_shadowed_text = draw_shadowed_text,
     push_clip = function(bounds) ui_renderer:push_clip(bounds) end,
     pop_clip = function() ui_renderer:pop_clip() end,
@@ -791,6 +834,10 @@ local services = {
     preview_seek_to_mouse = preview_seek_to_mouse,
     seek_pos_from_mouse = seek_pos_from_mouse, seek_to_pos = seek_to_pos,
     select_stream_quality = select_stream_quality,
+    open_media_files = media_loader.open_files,
+    open_media_link = media_loader.open_link,
+    append_media_files = media_loader.append_files,
+    append_media_link = media_loader.append_link,
     open_subtitle_file_picker = open_subtitle_file_picker,
     open_subtitle_link_picker = open_subtitle_link_picker,
     open_secondary_subtitle_file_picker = open_secondary_subtitle_file_picker,
@@ -839,6 +886,7 @@ local function read_player_snapshot() return snapshot_reader:read() end
 local runtime_host
 local animation_coordinator = animation_coordinator_module.new({
   runtime = runtime, mouse_in = mouse_in, tooltip = tooltip_service,
+  empty_state_visible = function() return app.empty_visible end,
   single_click_actions_enabled = function()
     return opts.single_click_actions_enabled
   end,

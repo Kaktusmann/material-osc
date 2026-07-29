@@ -12,6 +12,7 @@ function animation_coordinator.new(args)
     runtime.chapter.animation,
     runtime.chapter.fade,
     runtime.playlist.animation,
+    runtime.playlist.controls_opacity,
     runtime.playlist.width_animation,
     runtime.playlist.height_animation,
     runtime.subtitle.animation,
@@ -77,7 +78,18 @@ function animation_coordinator.new(args)
   end
 
   function service:render_mode()
-    if runtime.controller.opacity:is_running() then return "visual" end
+    if runtime.playlist.controls_opacity:is_running() or
+      runtime.controller.opacity:is_running() then
+      return "visual"
+    end
+    if runtime.context_menu.animation:is_running() or
+      runtime.context_menu.width_animation:is_running() or
+      runtime.context_menu.height_animation:is_running() then
+      return "interaction"
+    end
+    if args.empty_state_visible and args.empty_state_visible() then
+      return "dynamic"
+    end
     if runtime.volume.animation:is_running() and
       not (runtime.context_menu.animation:is_running() or
         runtime.playlist.animation:is_running() or
@@ -98,6 +110,7 @@ function animation_coordinator.new(args)
 
   function service:edge_targets()
     local pointer = runtime.pointer
+    local playback_available = (runtime.snapshot.playlist_count or 0) > 0
     local controller_bounds = runtime.controller.bounds
     local window_controls_bounds = runtime.window_controls.bounds
     local volume_popup_bounds = runtime.volume.popup_bounds
@@ -116,7 +129,8 @@ function animation_coordinator.new(args)
       runtime.settings.open or runtime.settings.animation.value > 0.001
     local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
       runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
-    local edge_allowed = args.single_click_actions_enabled() and
+    local edge_allowed = playback_available and
+      args.single_click_actions_enabled() and
       not runtime.controller.pointer_timed_out and
       not edge_modal and not over_controller and
       pointer.x >= 0 and pointer.y >= args.edge_seek_top_inset()
@@ -149,7 +163,9 @@ function animation_coordinator.new(args)
       runtime.controller.hide_cursor_after_fade = false
       args.hide_cursor()
     end
-    local wants_volume = not modal and (runtime.volume.dragging or
+    local playback_available = (runtime.snapshot.playlist_count or 0) > 0
+    local wants_volume = playback_available and not modal and
+      (runtime.volume.dragging or
       (not runtime.controller.pointer_timed_out and
         ((runtime.volume.button_bounds and
           args.mouse_in(runtime.volume.button_bounds)) or
@@ -167,6 +183,12 @@ function animation_coordinator.new(args)
       runtime.playlist.open and 1 or 0, now,
       runtime.playlist.open and 0.12 or 0.18)
     runtime.playlist.animation:update(now)
+    local position_pill_visible =
+      runtime.seek.position_pill_visible == true
+    runtime.playlist.controls_opacity:set_target(
+      position_pill_visible and not runtime.playlist.open and 0 or 1,
+      now, position_pill_visible and 0.12 or 0.16)
+    runtime.playlist.controls_opacity:update(now)
 
     for _, name in ipairs({"chapter", "subtitle", "audio", "settings"}) do
       local state = runtime[name]

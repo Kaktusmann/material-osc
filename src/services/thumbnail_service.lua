@@ -68,7 +68,7 @@ function thumbnail.new(deps)
     local chapter_text = chapter_name_at(pos)
     local pill_text_size = 22
     local pill_vertical_padding = dp(4)
-    local pill_horizontal_padding = dp(8)
+    local pill_horizontal_padding = dp(12)
     local pill_background_alpha = "33"
     local thumb_w = has_thumbnail and state.width or 0
     local thumb_h = has_thumbnail and state.height or 0

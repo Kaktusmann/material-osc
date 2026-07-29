@@ -92,7 +92,8 @@ local PREFERRED_KEYS = {
 -- keep their declared defaults available for the corresponding tooltips.
 local SCRIPT_DEFAULT_KEYS = {
   ["open-settings"] = "Ctrl+,",
-  ["open-playlist"] = "Alt+p"
+  ["open-playlist"] = "Alt+p",
+  ["temporary-speed"] = "c"
 }
 
 local function normalize_command(command)

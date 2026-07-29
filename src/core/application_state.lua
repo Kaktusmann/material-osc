@@ -43,7 +43,10 @@ function application_state.new(args)
     },
     time = {show_remaining = false},
     temporary_speed = {active = false, previous = nil},
-    seek = {dragging = false, position = nil, offset_x = 0},
+    seek = {
+      dragging = false, position = nil, offset_x = 0,
+      preview_bounds = nil, position_pill_visible = false
+    },
     wheel = {kind = nil, amount = 0, timer = nil},
     edge_seek = {
       left = {bounds = nil},
@@ -142,6 +145,9 @@ function application_state.new(args)
   })
   runtime.playlist.animation = animation.tween({
     initial = 0, duration = POPUP_FADE_DURATION
+  })
+  runtime.playlist.controls_opacity = animation.tween({
+    initial = 1, duration = 0.14
   })
   runtime.playlist.width_animation = animation.spring({
     initial = 118,

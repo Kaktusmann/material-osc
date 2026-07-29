@@ -139,6 +139,13 @@ function controller.new(args)
     end
     local seek_changed = runtime.pointer.seek_hover_x ~= seek_x
     runtime.pointer.seek_hover_x = seek_x
+    local preview_bounds = runtime.seek.preview_bounds
+    local position_pill_visible = preview_bounds ~= nil and
+      (runtime.seek.dragging or
+        (runtime.controller.visible and args.mouse_in(preview_bounds)))
+    local position_pill_changed =
+      runtime.seek.position_pill_visible ~= position_pill_visible
+    runtime.seek.position_pill_visible = position_pill_visible
 
     local context_changed = false
     if runtime.context_menu.open then
@@ -152,7 +159,8 @@ function controller.new(args)
 
     local edge_changed = args.pointer_feedback_changed and
       args.pointer_feedback_changed()
-    if hover_changed or context_changed or edge_changed then
+    if hover_changed or context_changed or edge_changed or
+      position_pill_changed then
       return "interaction"
     end
     if seek_changed then return "dynamic" end

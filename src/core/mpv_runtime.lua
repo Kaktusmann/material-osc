@@ -37,7 +37,8 @@ function mpv_runtime.new(args)
     if enabled then
       mp.enable_key_bindings(context_menu_mouse_binding,
         "allow-hide-cursor+allow-vo-dragging")
-      mp.enable_key_bindings(context_menu_keyboard_binding)
+      mp.enable_key_bindings(context_menu_keyboard_binding,
+        "allow-hide-cursor+allow-vo-dragging")
     else
       mp.disable_key_bindings(context_menu_mouse_binding)
       mp.disable_key_bindings(context_menu_keyboard_binding)
@@ -355,7 +356,7 @@ function mpv_runtime.new(args)
       args.set_playlist_open(opening)
       if opening then controller():show() end
     end)
-    mp.add_key_binding(nil, "hold-double-speed", function(event)
+    mp.add_key_binding("c", "hold-double-speed", function(event)
       args.temporary_speed:handle(event)
     end, {complex = true, repeatable = false})
     state.properties["input-bindings"] =

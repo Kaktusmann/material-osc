@@ -10,6 +10,8 @@ function seekbar_renderer.new(deps)
   local enqueue_effect, thumbnail_service = deps.enqueue_effect, deps.thumbnail_service
 
   local function draw_seekbar(ass, x1, y, x2)
+    runtime.seek.preview_bounds = nil
+    runtime.seek.position_pill_visible = false
     local duration = runtime.snapshot.duration or 0
     local pos = runtime.seek.dragging and runtime.seek.position or
             (runtime.snapshot.position or 0)
@@ -124,7 +126,10 @@ function seekbar_renderer.new(deps)
       x2 = x2,
       y2 = seek_y + seek_h + dp(6)
     }
+    runtime.seek.preview_bounds = preview_area
     local hovering_seek = runtime.controller.visible and mouse_in(preview_area)
+    runtime.seek.position_pill_visible =
+      runtime.seek.dragging or hovering_seek
     local handle_h = dp(hovering_seek and 24 or 22)
     local handle_y = seek_y + seek_h / 2
     draw_box(ass, handle_x - handle_w / 2, handle_y - handle_h / 2,

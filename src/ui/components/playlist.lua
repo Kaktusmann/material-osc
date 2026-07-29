@@ -119,6 +119,38 @@ function playlist.new(services)
     return node
   end
 
+  local function AddMediaButton(name, icon, label, on_click)
+    local node = {
+      icon = icon, label = label, opacity = 0, interactive = false,
+      modifier = Modifier():fillMaxWidth():height(dp(40)):clickable({
+        name = name, enabled = false, on_click = on_click
+      }):hoverIndication({alpha = "D2", inset = dp(2)})
+    }
+    function node:update(opacity, interactive)
+      self.opacity, self.interactive = opacity, interactive
+      self.modifier.pointer_enabled = interactive
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = 0, h = dp(40)}, parent)
+    end
+    function node:draw(ass, bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2, bounds.h / 2,
+        "#FFFFFF", alpha(self.opacity * 0.12))
+      local icon_size, label_size, gap = 22, 22, dp(4)
+      local label_width = ui.text_width(self.label, label_size)
+      local content_width = dp(icon_size) + gap + label_width
+      local icon_x = bounds.x + (bounds.w - content_width) / 2 +
+        dp(icon_size) / 2
+      draw_icon(ass, icon_x, bounds.y + bounds.h / 2,
+        self.icon, "#FFFFFF", icon_size, alpha(self.opacity))
+      draw_text(ass, icon_x + dp(icon_size) / 2 + gap,
+        bounds.y + bounds.h / 2,
+        self.label, label_size, "#FFFFFF", alpha(self.opacity),
+        default_text_font, 4)
+    end
+    return node
+  end
+
   local function PlaylistScrollbar()
     local node = {
       item_count = 0, visible_count = 1, interactive = false, opacity = 0,
@@ -197,6 +229,10 @@ function playlist.new(services)
     node.rows = {}
     for slot = 1, 18 do node.rows[slot] = PlaylistRow(slot) end
     node.scrollbar = PlaylistScrollbar()
+    node.add_files = AddMediaButton("playlist-add-files", "add",
+      "File(s)", services.player.append_media_files)
+    node.add_link = AddMediaButton("playlist-add-link", "link",
+      "Link", services.player.append_media_link)
     node.shuffle = FooterButton("playlist-shuffle", "shuffle", "Shuffle",
       function()
         local shuffled = playlist_state.shuffled == true
@@ -238,6 +274,8 @@ function playlist.new(services)
       })
       self.shuffle.modifier.pointer_enabled = interactive
       self.loop.modifier.pointer_enabled = interactive
+      self.add_files:update(opacity, interactive)
+      self.add_link:update(opacity, interactive)
     end
     function node:measure(parent)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
@@ -248,10 +286,34 @@ function playlist.new(services)
       local hover_alpha = alpha(self.opacity * 0.16)
       local selected_alpha = alpha(self.opacity * 0.30)
 
-      local footer_h, padding, footer_gap = dp(43), dp(8), dp(8)
-      local list_area = Rect({x = bounds.x + padding, y = bounds.y + padding,
+      local header_h, footer_h = dp(56), dp(43)
+      local padding, footer_gap, button_gap = dp(8), dp(8), dp(4)
+      local header = Rect({x = bounds.x, y = bounds.y,
+        w = bounds.w, h = header_h})
+      local button_w = math.max(0,
+        (header.w - padding * 2 - button_gap) / 2)
+      local button_parent = Rect({
+        x = header.x, y = header.y, w = button_w, h = header.h
+      })
+      local files_size = measure_node(self.add_files, button_parent)
+      local link_size = measure_node(self.add_link, button_parent)
+      local button_y = header.y + (header.h - files_size.h) / 2
+      draw_node(self.add_files, ass, Rect({
+        x = header.x + padding, y = button_y,
+        w = button_w, h = files_size.h
+      }))
+      draw_node(self.add_link, ass, Rect({
+        x = header.x + padding + button_w + button_gap, y = button_y,
+        w = button_w, h = link_size.h
+      }))
+      draw_rect(ass, header.x, header.y2 - dp(1), header.x2, header.y2,
+        "#FFFFFF", alpha(self.opacity * 0.16))
+
+      local list_area = Rect({x = bounds.x + padding,
+        y = bounds.y + header_h + padding,
         w = bounds.w - padding * 2,
-        h = math.max(0, bounds.h - footer_h - padding - footer_gap)})
+        h = math.max(0,
+          bounds.h - header_h - footer_h - padding - footer_gap)})
       local row_h = dp(52)
       -- Row capacity belongs to the fully expanded panel. Deriving it from
       -- the animated height makes a settling spring briefly add a scrollbar.
@@ -366,6 +428,8 @@ function playlist.new(services)
     function node:update(snapshot)
       self.snapshot = snapshot
       self.morph = clamp(playlist_state.animation.value, 0, 1)
+      self.controls_opacity = clamp(
+        playlist_state.controls_opacity.value, 0, 1)
       if playlist_state.open then playlist_state.handoff = false end
       local content_progress = clamp((self.morph - 0.62) / 0.38, 0, 1)
       content_progress = content_progress * content_progress *
@@ -379,7 +443,7 @@ function playlist.new(services)
       self.backdrop.modifier.pointer_enabled = morphing
       self.content.modifier.pointer_enabled = morphing
       self.panel_width = math.max(dp(260), math.min(dp(380), state.viewport.w - dp(24)))
-      local row_h, panel_chrome = dp(52), dp(59)
+      local row_h, panel_chrome = dp(52), dp(115)
       local maximum_h = math.max(panel_chrome + row_h,
         math.min(dp(520), state.viewport.h - dp(24)))
       local maximum_rows = math.max(1, math.floor((maximum_h - panel_chrome) / row_h))
@@ -406,12 +470,15 @@ function playlist.new(services)
         icon = "playlist_play",
         transition_icon = "menu_open",
         transition_progress = self.morph,
+        alpha = alpha(self.controls_opacity),
         tooltip = self.morph < 0.5 and "Playlist" or "Collapse"
       })
       self.previous:update({
+        alpha = alpha(self.controls_opacity),
         enabled = count > 1 and position >= 0 and (wraps or position > 0)
       })
       self.next:update({
+        alpha = alpha(self.controls_opacity),
         enabled = count > 1 and position >= 0 and (wraps or position < count - 1)
       })
       -- These are the same controls in both states, so their moving hitboxes
@@ -470,7 +537,8 @@ function playlist.new(services)
       if self.morph == 0 and not playlist_state.open and
         not morphing then
         draw_box(ass, source.x, source.y, source.x2, source.y2,
-          source.h / 2, "#050708", "58")
+          source.h / 2, "#050708",
+          alpha(self.controls_opacity * (1 - 0x58 / 255)))
         draw_control_buttons(ass, source, source, 0)
       end
       local title = self.snapshot.media_title or ""
@@ -478,7 +546,8 @@ function playlist.new(services)
       local available = math.max(0, bounds.x2 - title_x - dp(8))
       title = truncate_to_width(title, available, 24)
       ui.draw_shadowed_text(ass, title_x, bounds.y + bounds.h / 2,
-        title, 24, "#FFFFFF", nil, default_text_font, 4)
+        title, 24, "#FFFFFF", alpha(self.controls_opacity),
+        default_text_font, 4)
     end
 
     function node:draw_expanded(ass, bounds)

@@ -327,11 +327,7 @@ function update_service.new(args)
     mp.add_timeout(2, function() service:check() end)
   end
 
-  function service:open_release()
-    local url = "https://github.com/" .. REPOSITORY .. "/releases"
-    if state.tag and tostring(state.tag) ~= "" then
-      url = url .. "/tag/" .. tostring(state.tag)
-    end
+  local function open_url(url, error_message)
     local os_name = jit and jit.os or ""
     local command
     if os_name == "Windows" then
@@ -342,8 +338,21 @@ function update_service.new(args)
       command = {"xdg-open", url}
     end
     subprocess(command, function(ok)
-      if not ok then mp.osd_message("Could not open the release page", 2) end
+      if not ok then mp.osd_message(error_message, 2) end
     end)
+  end
+
+  function service:open_repository()
+    open_url("https://github.com/" .. REPOSITORY,
+      "Could not open the material-osc repository")
+  end
+
+  function service:open_release()
+    local url = "https://github.com/" .. REPOSITORY .. "/releases"
+    if state.tag and tostring(state.tag) ~= "" then
+      url = url .. "/tag/" .. tostring(state.tag)
+    end
+    open_url(url, "Could not open the release page")
   end
 
   return service

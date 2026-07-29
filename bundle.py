@@ -258,7 +258,29 @@ def subset_symbol_font(source_dir: Path, source_font: Path, output_font: Path) -
     return len(icons)
 
 
-def build_fonts(source_dir: Path, destination_fonts: Path) -> tuple[int, int, int]:
+def optimize_text_font(source_font: Path, output_font: Path) -> tuple[int, int]:
+    try:
+        from fontTools.ttLib import TTFont
+        from fontTools.varLib.instancer import instantiateVariableFont
+    except ImportError as error:
+        raise RuntimeError(
+            "FontTools is required to optimize the text font. "
+            "Install build dependencies with: pip install -r requirements-build.txt"
+        ) from error
+
+    font = TTFont(source_font)
+    instantiateVariableFont(font, {
+        "opsz": 18,
+        "wdth": 100,
+        "GRAD": 0,
+        "ROND": 0,
+        "slnt": 0,
+    }, inplace=True, optimize=True)
+    font.save(output_font)
+    return source_font.stat().st_size, output_font.stat().st_size
+
+
+def build_fonts(source_dir: Path, destination_fonts: Path) -> tuple[int, int, int, int, int]:
     if destination_fonts.exists():
         shutil.rmtree(destination_fonts)
     destination_fonts.mkdir(parents=True)
@@ -272,8 +294,16 @@ def build_fonts(source_dir: Path, destination_fonts: Path) -> tuple[int, int, in
     source_text_font = FONTS_DIR / TEXT_FONT
     if not source_text_font.is_file():
         raise FileNotFoundError(f"Text font source not found: {source_text_font}")
-    shutil.copy2(source_text_font, destination_fonts / OUTPUT_TEXT_FONT)
-    return icon_count, source_symbol_font.stat().st_size, output_symbol_font.stat().st_size
+    text_source_size, text_output_size = optimize_text_font(
+        source_text_font, destination_fonts / OUTPUT_TEXT_FONT
+    )
+    return (
+        icon_count,
+        source_symbol_font.stat().st_size,
+        output_symbol_font.stat().st_size,
+        text_source_size,
+        text_output_size,
+    )
 
 
 def validate_version(version: str) -> str:
@@ -313,9 +343,13 @@ def main() -> None:
     legacy_fonts = destination / "material-osc"
     if legacy_fonts.exists():
         shutil.rmtree(legacy_fonts)
-    icon_count, source_font_size, subset_font_size = build_fonts(
-        source_dir, destination / "fonts"
-    )
+    (
+        icon_count,
+        source_font_size,
+        subset_font_size,
+        text_source_size,
+        text_output_size,
+    ) = build_fonts(source_dir, destination / "fonts")
     print(
         f"Built material-osc {args.version} with {module_count} modules and "
         f"{icon_count} icons in {destination}"
@@ -327,6 +361,10 @@ def main() -> None:
     print(
         f"Subset {SYMBOL_FONT}: {source_font_size // 1024} KiB -> "
         f"{subset_font_size // 1024} KiB"
+    )
+    print(
+        f"Optimized {TEXT_FONT}: {text_source_size // 1024} KiB -> "
+        f"{text_output_size // 1024} KiB"
     )
 
 

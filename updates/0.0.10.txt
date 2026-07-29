@@ -1,0 +1,9 @@
+- Added a new welcome screen when no media is loaded, with options to open local files or a link, a drag-and-drop hint, and quick access to the material-osc repository.
+- Files and links can now be added directly to the current playlist from new controls at the top of the Playlist panel.
+- YouTube watch links containing a playlist now load the full playlist and begin at the linked video. Set `ytdl-raw-options=no-playlist=` in `mpv.conf` to preserve mpv's single-video behavior.
+- Dragging the Playback Speed slider now allows precise 0.01x adjustments instead of snapping to 0.05x steps.
+- Hardware decoding overrides are now opt-in. Preserving mpv's configured playback settings avoids video-output stalls seen with some live streams and hybrid-GPU systems.
+- Fixed subtitle border adjustments on current mpv versions by using the supported outline-size property.
+- Playlist controls now fade out while the seekbar's position preview is visible, preventing the two interfaces from overlapping.
+- Improved pointer-timeout behavior so the cursor reliably hides after edge-seek feedback, even when the main controls are already hidden.
+- Release archives are now smaller thanks to Lua minification and text-font optimization.
