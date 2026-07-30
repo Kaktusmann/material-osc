@@ -115,7 +115,9 @@ function controller.new(args)
 
   function service:sync_visibility_with_pointer()
     local pointer_active = runtime.pointer.x >= 0 and runtime.pointer.y >= 0
-    if (opts.show_on_mouse_move and pointer_active) or self:should_show_at_pointer() then
+    local show_from_pointer =
+      pointer_active and (runtime.pip.active or opts.show_on_mouse_move)
+    if show_from_pointer or self:should_show_at_pointer() then
       return self:show()
     end
     local changed = self:animate_visibility(false)
@@ -408,7 +410,8 @@ function controller.new(args)
     if value and value.w and value.h and value.w > 0 and value.h > 0 then
       runtime.viewport.w, runtime.viewport.h = value.w, value.h
     end
-    args.render()
+    if args.render_layout then args.render_layout()
+    else args.render() end
   end
 
   function service:on_hidpi_scale(_, value)
@@ -417,7 +420,8 @@ function controller.new(args)
       runtime.viewport.dpi = dpi
       args.recreate_app()
     end
-    args.render()
+    if args.render_layout then args.render_layout()
+    else args.render() end
   end
 
   return service

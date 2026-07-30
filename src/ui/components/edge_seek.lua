@@ -58,6 +58,8 @@ function edge_seek.new(services)
     local icon_size = 64 * (1 + 0.12 * feedback)
     ui.draw_icon(ass, icon_x, cy, icon, "#FFFFFF", icon_size, alpha, true)
 
+    if state.pip.active then return end
+
     local pill_h = dp(40)
     local pill_w = ui.text_width(label, 22) + dp(32)
     local pill_y = cy + dp(48)

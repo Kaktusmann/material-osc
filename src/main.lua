@@ -1,24 +1,33 @@
 local options = require "mp.options"
 local opts = {
+  -- Appearance and controls
+  dpi_scale = "auto",
+  accent_color = "#00bbff",
+  context_menu = true,
+  tooltip = true,
+  show_mini_seekbar = false,
+  screenshot_button = true,
+  pip_button = true,
+  window_controls = "auto",
+
+  -- Interaction
   mouse_timeout = 2,
   show_on_mouse_move = false,
   single_click_actions_enabled = true,
   seeking_zone_percentage = 15,
-  show_mini_seekbar = false,
-  window_controls = "auto",
-  youtube_quality = "auto",
+  seek_step_seconds = 5,
+  temporary_speed = 2,
+  max_volume_percentage = 150,
+
+  -- Window Behavior
   force_hwdec = false,
   force_display_resample = true,
   force_force_window = true,
+
+  -- Playlist behavior
   directory_playlist = true,
   directory_playlist_sort = "name",
-  context_menu = true,
-  tooltip = true,
-  seek_step_seconds = 5,
-  dpi_scale = "auto",
-  accent_color = "#00bbff",
-  max_volume_percentage = 150,
-  temporary_speed = 2
+  youtube_quality = "auto"
 }
 local option_defaults = {}
 for name, value in pairs(opts) do option_defaults[name] = value end
@@ -176,6 +185,7 @@ local function create_app(services)
   node.playlist_controls = playlist_module.new(services)
   node.seekbar = controls.SeekBar()
   node.controls = controls.ControlsRow()
+  node.pip_control = controls.PipControl()
   node.window_drag_area = controls.WindowDragArea()
   node.window_controls = controls.WindowControls()
   node.controller = ui.Column({
@@ -311,7 +321,19 @@ local function create_app(services)
       state.pointer.x, state.pointer.y = -1, -1
     end
 
-    if self.empty_visible then
+    if state.pip.active then
+      state.volume.popup_bounds, state.volume.button_bounds = nil, nil
+      if state.controller.opacity.value > 0 then
+        state.controller.bounds = ui.draw_node(self.pip_control, ass, root)
+      else
+        local size = ui.measure_node(self.pip_control, root)
+        state.controller.bounds = ui.Rect({
+          x = root.x2 - size.w, y = root.y2 - size.h,
+          w = size.w, h = size.h
+        })
+      end
+      state.pip.bounds = state.controller.bounds
+    elseif self.empty_visible then
       state.controller.bounds = nil
       state.volume.popup_bounds, state.volume.button_bounds = nil, nil
       state.edge_seek.left.bounds, state.edge_seek.right.bounds = nil, nil
@@ -324,10 +346,12 @@ local function create_app(services)
       })
       state.volume.popup_bounds, state.volume.button_bounds = nil, nil
     end
+    if not state.pip.active then state.pip.bounds = nil end
 
     local show_window_controls = opts.window_controls == "yes" or
       (opts.window_controls == "auto" and
-        (not state.snapshot.window_border or not state.snapshot.title_bar or state.snapshot.fullscreen))
+        (not state.snapshot.window_border or not state.snapshot.title_bar or
+          state.snapshot.fullscreen))
     if show_window_controls then
       local controls_size = ui.measure_node(self.window_controls, root)
       ui.draw_node(self.window_drag_area, ass, root)
@@ -372,7 +396,7 @@ local function create_app(services)
     end
     local pointer_x, pointer_y = state.pointer.x, state.pointer.y
     if modal_is_open() then state.pointer.x, state.pointer.y = -1, -1 end
-    if state.controller.opacity.value > 0 then
+    if not state.pip.active and state.controller.opacity.value > 0 then
       if self.seekbar.bounds then self.seekbar:draw(ass, self.seekbar.bounds) end
       self.controls:draw_dynamic(ass)
     end
@@ -391,13 +415,13 @@ local function create_app(services)
     if modal_open or volume_owns_pointer then
       state.pointer.x, state.pointer.y = -1, -1
     end
-    if state.controller.opacity.value > 0 then
+    if not state.pip.active and state.controller.opacity.value > 0 then
       if not self.empty_visible then
         ui.draw_node(self.controller, ass, root)
       end
-      if state.window_controls.bounds then
-        ui.draw_node(self.window_controls, ass, root)
-      end
+    end
+    if state.window_controls.bounds and state.controller.opacity.value > 0 then
+      ui.draw_node(self.window_controls, ass, root)
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
     if not self.empty_visible and volume_owns_pointer and not modal_open then
@@ -421,6 +445,9 @@ local function create_app(services)
     services.playback_indicator:draw(ass, root)
     self.edge_seek:draw(ass, root)
     ui.draw_node(self.media_information_close, ass, root)
+    if state.pip.active and state.controller.opacity.value > 0 then
+      ui.draw_node(self.pip_control, ass, root)
+    end
   end
 
   function node:draw_modal(ass, root)
@@ -457,6 +484,7 @@ local function create_app(services)
   end
 
   function node:has_visible_overlay()
+    if state.pip.active then return true end
     if not self.empty_visible and opts.show_mini_seekbar and
       (state.snapshot.duration or 0) > 0 and
       state.controller.opacity.value < 0.999 then
@@ -818,6 +846,7 @@ local services = {
   platform = {msg = msg, utils = utils},
   effects = {
     render = function() return render(false, "interaction") end,
+    render_all = function() return render(false) end,
     enqueue = enqueue_effect
   },
   ui = {
@@ -1105,6 +1134,7 @@ controller = controller_module.new({
     return math.max(runtime.timers.frame_interval, 1 / 120)
   end,
   render = function() render(false, "interaction") end,
+  render_layout = function() render(false) end,
   render_dynamic = function() render(false, "dynamic") end,
   render_visibility = function() render(false) end,
   recreate_app = recreate_app

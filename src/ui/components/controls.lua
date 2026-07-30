@@ -15,6 +15,7 @@ function controls.new(services)
   local draw_seekbar, mouse_in = ui.draw_seekbar, ui.mouse_in
   local text_width, format_time = ui.text_width, ui.format_time
   local render = services.effects.render
+  local render_all = services.effects.render_all or render
   local preview_seek_to_mouse = player.preview_seek_to_mouse
   local seek_pos_from_mouse, seek_to_pos = player.seek_pos_from_mouse, player.seek_to_pos
   local set_chapter_dialog_open = navigation.set_chapter_open
@@ -30,6 +31,57 @@ function controls.new(services)
   local Visibility, Row, Pill = ui.Visibility, ui.Row, ui.Pill
   local ConnectedPill = ui.ConnectedPill
   local is_render_pass = ui.is_render_pass
+
+  local function set_pip_enabled(enabled)
+    if state.pip.raise_timer then
+      state.pip.raise_timer:kill()
+      state.pip.raise_timer = nil
+    end
+    if enabled then
+      state.pip.restore = {
+        fullscreen = mp.get_property_native("fullscreen") == true,
+        maximized = mp.get_property_native("window-maximized") == true,
+        ontop = mp.get_property_native("ontop") == true,
+        scale = mp.get_property_number("current-window-scale")
+      }
+      state.pip.active = true
+      state.controller.visible = false
+      state.controller.pointer_timed_out = true
+      state.controller.opacity:snap(0)
+      mp.set_property_bool("fullscreen", false)
+      mp.set_property_bool("window-maximized", false)
+      mp.set_property_bool("ontop", true)
+      mp.set_property("geometry", "30%-24-24")
+    else
+      local restore = state.pip.restore or {}
+      state.pip.active, state.pip.restore, state.pip.bounds = false, nil, nil
+      mp.set_property_bool("fullscreen", false)
+      mp.set_property_bool("window-maximized", false)
+      mp.set_property("geometry", "50%:50%")
+      if restore.scale then
+        mp.set_property_number("current-window-scale", restore.scale)
+      end
+      if restore.maximized then
+        mp.set_property_bool("window-maximized", true)
+      elseif restore.fullscreen then
+        mp.set_property_bool("fullscreen", true)
+      end
+      if restore.ontop then
+        mp.set_property_bool("ontop", true)
+      else
+        local raise_timer
+        raise_timer = mp.add_timeout(0.12, function()
+          if state.pip.raise_timer ~= raise_timer then return end
+          state.pip.raise_timer = nil
+          if not state.pip.active then
+            mp.set_property_bool("ontop", false)
+          end
+        end)
+        state.pip.raise_timer = raise_timer
+      end
+    end
+    render_all()
+  end
 
   local function VolumeSlider()
     local node = {
@@ -454,12 +506,24 @@ function controls.new(services)
       horizontal_padding = 6, tooltip = "Take Screenshot",
       shortcut = "screenshot",
       on_click = function() mp.commandv("screenshot", "subtitles") end})
+    node.screenshot_visibility = Visibility({
+      visible = config.opts.screenshot_button,
+      child = node.screenshot
+    })
     node.settings = IconButton({name = "settings-button", icon = "settings",
       horizontal_padding = 6, tooltip = "Settings",
       shortcut = "open-settings",
       on_click = function()
         set_settings_dialog_open(not settings_state.open)
       end})
+    node.pip = IconButton({name = "picture-in-picture-button",
+      icon = "picture_in_picture_alt", horizontal_padding = 6,
+      tooltip = "Picture in Picture",
+      on_click = function() set_pip_enabled(not state.pip.active) end})
+    node.pip_visibility = Visibility({
+      visible = config.opts.pip_button,
+      child = node.pip
+    })
     node.fullscreen = IconButton({name = "fullscreen-button",
       icon = "open_in_full", horizontal_padding = 6, tooltip = "Fullscreen",
       shortcut = "fullscreen",
@@ -467,12 +531,15 @@ function controls.new(services)
     node.ending = Pill({
       gap = 0,
       children = {
-        node.subtitles_visibility, node.screenshot, node.settings, node.fullscreen
+        node.subtitles_visibility, node.screenshot_visibility,
+        node.pip_visibility, node.settings, node.fullscreen
       },
       modifier = Modifier():align({horizontal = "ending", vertical = "center"})
     })
 
     function node:update(snapshot, static_changed)
+      self.screenshot_visibility:set_visible(config.opts.screenshot_button)
+      self.pip_visibility:set_visible(config.opts.pip_button)
       if static_changed then
         self.play:update({
           icon = snapshot.paused and "play_arrow" or "pause",
@@ -506,6 +573,11 @@ function controls.new(services)
           icon = subtitles_on and "subtitles" or "subtitles_off",
           tooltip = subtitles_on and "Hide Subtitles" or "Show Subtitles"
         })
+        self.pip:update({
+          icon = state.pip.active and "pip_exit" or "picture_in_picture_alt",
+          tooltip = state.pip.active and
+            "Exit Picture in Picture" or "Picture in Picture"
+        })
         self.fullscreen:update({
           icon = snapshot.fullscreen and "close_fullscreen" or "open_in_full",
           tooltip = snapshot.fullscreen and "Exit Fullscreen" or "Fullscreen"
@@ -537,6 +609,45 @@ function controls.new(services)
 
     function node:draw_volume_interaction(ass)
       if self.volume.bounds then self.volume:draw(ass, self.volume.bounds) end
+    end
+
+    return node
+  end
+
+  local function PipControl()
+    local function exit_pip() set_pip_enabled(false) end
+    local outer_padding = dp(12)
+    local node = {
+      modifier = Modifier():padding({all = outer_padding})
+        :align({horizontal = "ending", vertical = "bottom"})
+        :clickable({
+          name = "picture-in-picture-exit-button",
+          on_click = exit_pip
+        })
+        :hoverIndication({inset = outer_padding + dp(4)})
+    }
+    node.icon = IconButton({
+      icon = "pip_exit", size = 30, icon_size = 28,
+      modifier = Modifier():padding({
+        horizontal = dp(6), vertical = dp(2)
+      })
+    })
+    node.label = TextItem({
+      text = "Exit PiP", size = 20,
+      modifier = Modifier():padding({ending = dp(6)})
+    })
+    node.pill = Pill({
+      gap = 0,
+      children = {node.icon, node.label}
+    })
+
+    function node:measure(parent)
+      return apply_modifier_size(
+        self.modifier, measure_node(self.pill, parent), parent)
+    end
+
+    function node:draw(ass, bounds)
+      draw_node(self.pill, ass, content_bounds(bounds, self.modifier))
     end
 
     return node
@@ -656,6 +767,7 @@ function controls.new(services)
     SeekBar = SeekBar,
     VideoSurface = VideoSurface,
     ControlsRow = ControlsRow,
+    PipControl = PipControl,
     WindowDragArea = WindowDragArea,
     WindowControls = WindowControls,
     TooltipHost = TooltipHost

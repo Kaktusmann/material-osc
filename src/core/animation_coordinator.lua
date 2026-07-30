@@ -119,9 +119,11 @@ function animation_coordinator.new(args)
     local controller_bounds = runtime.controller.bounds
     local window_controls_bounds = runtime.window_controls.bounds
     local volume_popup_bounds = runtime.volume.popup_bounds
+    local pip_bounds = runtime.pip.bounds
     local over_controller = (controller_bounds and args.mouse_in(controller_bounds)) or
       (window_controls_bounds and args.mouse_in(window_controls_bounds)) or
-      (volume_popup_bounds and args.mouse_in(volume_popup_bounds))
+      (volume_popup_bounds and args.mouse_in(volume_popup_bounds)) or
+      (pip_bounds and args.mouse_in(pip_bounds))
     local context_visible = runtime.context_menu.open or
       runtime.context_menu.pending_x ~= nil or
       runtime.context_menu.animation:is_running() or

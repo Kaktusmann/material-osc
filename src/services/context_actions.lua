@@ -177,21 +177,23 @@ function context_actions.new(args)
       "accent_color",
       "context_menu",
       "tooltip",
+      "show_mini_seekbar",
+      "screenshot_button",
+      "pip_button",
+      "window_controls",
       "mouse_timeout",
       "show_on_mouse_move",
       "single_click_actions_enabled",
       "seeking_zone_percentage",
       "seek_step_seconds",
-      "show_mini_seekbar",
-      "window_controls",
-      "youtube_quality",
+      "temporary_speed",
+      "max_volume_percentage",
       "force_hwdec",
       "force_display_resample",
       "force_force_window",
-      "max_volume_percentage",
-      "temporary_speed",
       "directory_playlist",
-      "directory_playlist_sort"
+      "directory_playlist_sort",
+      "youtube_quality"
     }
     local preserved, configured, removed_unused =
       sanitize_configuration(existing, order)

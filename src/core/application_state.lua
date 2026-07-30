@@ -20,6 +20,7 @@ function application_state.new(args)
       bounds = nil
     },
     window_controls = {bounds = nil, reveal_bounds = nil},
+    pip = {active = false, restore = nil, bounds = nil, raise_timer = nil},
     pointer = {
       x = -1, y = -1, active = nil,
       hover_hitbox = nil, context_hover_hitbox = nil,
