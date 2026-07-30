@@ -1,7 +1,21 @@
 local brand_logo = {}
+local loading_indicator = require "src.ui.loading_indicator"
 
 function brand_logo.new(args)
-  return function(ass, center_x, center_y, requested_size, alpha,
+  local animation = loading_indicator.toggle_animation({
+    now_ms = args.now_ms
+  })
+  local service = {}
+
+  function service:toggle()
+    return animation:toggle()
+  end
+
+  function service:is_animating()
+    return animation:is_running()
+  end
+
+  function service:draw(ass, center_x, center_y, requested_size, alpha,
       ignore_controller_fade)
     local size = requested_size or 128
     local scale = size / 128
@@ -45,32 +59,14 @@ function brand_logo.new(args)
     curve(62.255, 20.609, 67.340, 20.609, 72.124, 19.208)
     ass:draw_stop()
 
-    begin_shape("#42B6E9")
-    move(100.160000, 38.919509); line(106.433850, 42.351180)
-    curve(123.548110, 51.711102, 123.548110, 76.290798,
-      106.433850, 85.650719)
-    line(100.160000, 89.082392)
-    curve(96.020032, 91.346772, 92.615362, 94.751444,
-      90.350986, 98.891409)
-    line(86.919315, 105.165260)
-    curve(77.559393, 122.279510, 52.979697, 122.279510,
-      43.619775, 105.165260)
-    line(40.188103, 98.891409)
-    curve(37.923722, 94.751444, 34.519051, 91.346772,
-      30.379085, 89.082392)
-    line(24.105237, 85.650719)
-    curve(6.990980, 76.290798, 6.990980, 51.711102,
-      24.105237, 42.351180)
-    line(30.379085, 38.919509)
-    curve(34.519051, 36.655127, 37.923722, 33.250455,
-      40.188103, 29.110490)
-    line(43.619775, 22.836642)
-    curve(52.979697, 5.722385, 77.559393, 5.722385,
-      86.919315, 22.836642)
-    line(90.350986, 29.110490)
-    curve(92.615362, 33.250455, 96.020032, 36.655127,
-      100.160000, 38.919509)
-    ass:draw_stop()
+    loading_indicator.draw_frame(ass, {
+      center_x = center_x,
+      center_y = center_y,
+      size = size,
+      color = args.ass_color(args.color and args.color() or "#42B6E9"),
+      alpha = rendered_alpha,
+      frame = animation:frame()
+    })
 
     begin_shape("#0A0C15")
     move(64.797499, 96.400230); line(64.797499, 96.400230)
@@ -133,6 +129,8 @@ function brand_logo.new(args)
     transformed_line(58.861, 54.481)
     ass:draw_stop()
   end
+
+  return service
 end
 
 return brand_logo

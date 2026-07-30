@@ -4,6 +4,11 @@ local STEP_MS = 650
 local FULL_ROTATION_MS = 4666
 local QUARTER_ROTATION = 90
 local TOTAL_POINTS = 144
+local REST_SHAPE_INDEX = 6
+local SETTLE_MS = 360
+local MINIMUM_SETTLE_ROTATION = 60
+local ROTATION_SPRING_STIFFNESS = 400
+local ROTATION_SPRING_DAMPING = 0.7
 
 local function shape(points, outer_radius, inner_radius, outer_roundness, inner_roundness)
   return {
@@ -34,13 +39,18 @@ end
 local function smoothstep(p) return p * p * (3 - 2 * p) end
 local function out_cubic(p) return 1 - (1 - p)^3 end
 
-local function spring_progress(ms)
-  local t, stiffness, damping = ms / 1000, 200, 0.6
+local function spring_value(ms, stiffness, damping)
+  local t = ms / 1000
+  stiffness, damping = stiffness or 200, damping or 0.6
   local omega0 = math.sqrt(stiffness)
   local omega_d = omega0 * math.sqrt(1 - damping * damping)
   local displacement = math.exp(-damping * omega0 * t) *
     (-math.cos(omega_d * t) - damping * omega0 / omega_d * math.sin(omega_d * t))
-  return math.max(0, math.min(1, 1 + displacement))
+  return 1 + displacement
+end
+
+local function spring_progress(ms)
+  return math.max(0, math.min(1, spring_value(ms)))
 end
 
 local function scale_pulse(ms)
@@ -146,33 +156,160 @@ for _, definition in ipairs(SEQUENCE) do
   shapes[#shapes + 1] = #shapes > 0 and align_to(shapes[#shapes], shape) or shape
 end
 
+local function animation_frame(elapsed, first_shape)
+  elapsed = math.max(0, elapsed or 0)
+  local step, morph_elapsed = math.floor(elapsed / STEP_MS),
+    elapsed % STEP_MS
+  local shape_step = step + (first_shape or 1) - 1
+  local progress = spring_progress(morph_elapsed)
+  return {
+    from = shapes[shape_step % #shapes + 1],
+    target = shapes[(shape_step + 1) % #shapes + 1],
+    progress = progress,
+    pulse = scale_pulse(morph_elapsed),
+    rotation = (step * QUARTER_ROTATION + progress * QUARTER_ROTATION +
+      (elapsed % FULL_ROTATION_MS) / FULL_ROTATION_MS * 360) *
+      math.pi / 180
+  }
+end
+
+local function rest_frame()
+  return {
+    from = shapes[REST_SHAPE_INDEX],
+    target = shapes[REST_SHAPE_INDEX],
+    progress = 0,
+    pulse = 1,
+    rotation = 0
+  }
+end
+
+local function point_at(frame, index)
+  local from, target = frame.from[index], frame.target[index]
+  local progress, pulse = frame.progress or 0, frame.pulse or 1
+  return lerp(from.x, target.x, progress) * pulse,
+    lerp(from.y, target.y, progress) * pulse
+end
+
+local function sample_frame(frame)
+  local points = {}
+  for index = 1, TOTAL_POINTS do
+    local x, y = point_at(frame, index)
+    points[index] = {x = x, y = y}
+  end
+  return points
+end
+
+function indicator.draw_frame(ass, args)
+  local frame, size = args.frame or rest_frame(), args.size
+  local cx, cy = size / 2, size / 2
+  local cos_r, sin_r = math.cos(frame.rotation), math.sin(frame.rotation)
+
+  ass:new_event()
+  ass:pos(args.center_x - size / 2, args.center_y - size / 2)
+  ass:an(7)
+  ass:append(string.format(
+    "{\\1c&H%s&\\1a&H%s&\\bord0\\shad0}", args.color, args.alpha))
+  ass:draw_start()
+  local first_x, first_y
+  for index = 1, TOTAL_POINTS do
+    local x, y = point_at(frame, index)
+    x, y = x * size, y * size
+    local rx, ry =
+      cx + x * cos_r - y * sin_r, cy + x * sin_r + y * cos_r
+    if index == 1 then
+      first_x, first_y = rx, ry
+      ass:move_to(rx, ry)
+    else
+      ass:line_to(rx, ry)
+    end
+  end
+  if first_x then ass:line_to(first_x, first_y) end
+  ass:draw_stop()
+end
+
+function indicator.toggle_animation(args)
+  local state = {
+    mode = "idle",
+    started_ms = 0,
+    settle_started_ms = 0,
+    settle_from = nil,
+    settle_rotation = 0
+  }
+  local service = {}
+
+  local function now_ms()
+    return args.now_ms and args.now_ms() or mp.get_time() * 1000
+  end
+
+  function service:frame(now)
+    now = now or now_ms()
+    if state.mode == "running" then
+      return animation_frame(now - state.started_ms, REST_SHAPE_INDEX)
+    end
+    if state.mode == "settling" then
+      local elapsed = math.max(0, now - state.settle_started_ms)
+      if elapsed >= SETTLE_MS then
+        state.mode, state.settle_from = "idle", nil
+        return rest_frame()
+      end
+      local progress = spring_progress(elapsed)
+      local rotation_progress = spring_value(
+        elapsed, ROTATION_SPRING_STIFFNESS, ROTATION_SPRING_DAMPING)
+      return {
+        from = state.settle_from,
+        target = shapes[REST_SHAPE_INDEX],
+        progress = progress,
+        pulse = 1,
+        rotation = lerp(
+          state.settle_rotation, state.settle_target_rotation,
+          rotation_progress)
+      }
+    end
+    return rest_frame()
+  end
+
+  function service:toggle()
+    local now = now_ms()
+    if state.mode == "running" then
+      local frame = self:frame(now)
+      state.mode = "settling"
+      state.settle_started_ms = now
+      state.settle_from = sample_frame(frame)
+      state.settle_rotation = frame.rotation
+      local quarter = math.pi / 2
+      local minimum_rotation = math.rad(MINIMUM_SETTLE_ROTATION)
+      state.settle_target_rotation =
+        math.ceil((frame.rotation + minimum_rotation) / quarter) * quarter
+      return false
+    end
+    if state.mode == "settling" then return false end
+    state.mode = "running"
+    state.started_ms = now
+    state.settle_from = nil
+    return true
+  end
+
+  function service:is_running()
+    return state.mode ~= "idle"
+  end
+
+  return service
+end
+
 function indicator.new(args)
   return function(ass, center_x, center_y, requested_size)
     local elapsed = mp.get_time() * 1000 - args.started_ms()
-    local step, morph_elapsed = math.floor(elapsed / STEP_MS), elapsed % STEP_MS
-    local progress = spring_progress(morph_elapsed)
-    local from, target = shapes[step % #shapes + 1], shapes[(step + 1) % #shapes + 1]
-    local rotation = (step * QUARTER_ROTATION + progress * QUARTER_ROTATION +
-      (elapsed % FULL_ROTATION_MS) / FULL_ROTATION_MS * 360) * math.pi / 180
-    local pulse, size = scale_pulse(morph_elapsed), requested_size or args.dp(72)
-    local cx, cy, cos_r, sin_r = size / 2, size / 2, math.cos(rotation), math.sin(rotation)
-
-    ass:new_event()
-    center_x, center_y = center_x or args.viewport().w / 2, center_y or args.viewport().h / 2
-    ass:pos(center_x - size / 2, center_y - size / 2)
-    ass:an(7)
-    ass:append(string.format("{\\1c&H%s&\\1a&H%s&\\bord0\\shad0}", args.color(), args.alpha(0.95)))
-    ass:draw_start()
-    local first_x, first_y
-    for i, from_point in ipairs(from) do
-      local to_point = target[i]
-      local x, y = lerp(from_point.x, to_point.x, progress) * size * pulse,
-        lerp(from_point.y, to_point.y, progress) * size * pulse
-      local rx, ry = cx + x * cos_r - y * sin_r, cy + x * sin_r + y * cos_r
-      if i == 1 then first_x, first_y = rx, ry; ass:move_to(rx, ry) else ass:line_to(rx, ry) end
-    end
-    if first_x then ass:line_to(first_x, first_y) end
-    ass:draw_stop()
+    local size = requested_size or args.dp(72)
+    center_x, center_y = center_x or args.viewport().w / 2,
+      center_y or args.viewport().h / 2
+    indicator.draw_frame(ass, {
+      center_x = center_x,
+      center_y = center_y,
+      size = size,
+      color = args.color(),
+      alpha = args.alpha(0.95),
+      frame = animation_frame(elapsed)
+    })
   end
 end
 

@@ -118,6 +118,8 @@ local subtitle_loader_module = require "src.services.subtitle_loader"
 local shader_loader_module = require "src.services.shader_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
 local bookmark_service_module = require "src.services.bookmark_service"
+local easter_egg_collection_module =
+  require "src.services.easter_egg_collection"
 local context_actions_module = require "src.services.context_actions"
 local keybinding_hints_module = require "src.services.keybinding_hints"
 local temporary_speed_module = require "src.services.temporary_speed"
@@ -409,7 +411,12 @@ local function create_app(services)
         services.ui.alpha(self.no_video_opacity), true)
     end
     ui.draw_node(self.empty_state, ass, root)
-    if self.empty_visible then return end
+    if self.empty_visible then
+      if state.playback_indicator.show_on_empty then
+        services.playback_indicator:draw(ass, root)
+      end
+      return
+    end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
     self.edge_seek:draw(ass, root)
@@ -671,6 +678,10 @@ local bookmark_service = bookmark_service_module.new({
     end
   end
 })
+local easter_egg_collection = easter_egg_collection_module.new({
+  mp = mp,
+  utils = utils
+})
 local context_actions = context_actions_module.new({
   mp = mp, utils = utils, format_time = format_time,
   bookmarks = bookmark_service, opts = opts, properties = runtime.properties,
@@ -705,10 +716,15 @@ local draw_boxes = function(...) return ui_renderer:draw_boxes(...) end
 local draw_text = function(...) return ui_renderer:draw_text(...) end
 local draw_shadowed_text = function(...) return ui_renderer:draw_shadowed_text(...) end
 local draw_icon = function(...) return ui_renderer:draw_icon(...) end
-local draw_brand_logo = brand_logo_module.new({
+local brand_logo = brand_logo_module.new({
   ass_color = function(color) return ui_renderer:ass_color(color) end,
-  fade_alpha = function(value) return ui_renderer:fade_alpha(value) end
+  fade_alpha = function(value) return ui_renderer:fade_alpha(value) end,
+  color = function() return opts.accent_color end,
+  now_ms = function() return mp.get_time() * 1000 end
 })
+local function draw_brand_logo(...)
+  return brand_logo:draw(...)
+end
 
 local draw_loading_shape_morph = loading_indicator.new({
   started_ms = function() return runtime.loading.started_ms end,
@@ -789,6 +805,7 @@ local services = {
   state = runtime,
   updater = updater,
   bookmarks = bookmark_service,
+  easter_eggs = easter_egg_collection,
   context_actions = context_actions,
   close_context_menu = close_context_menu,
   config = {
@@ -811,6 +828,7 @@ local services = {
     alpha = ass_alpha_for_opacity, draw_rect = draw_rect, draw_box = draw_box,
     draw_round_box = draw_round_box,
     draw_icon = draw_icon, draw_brand_logo = draw_brand_logo,
+    toggle_brand_logo = function() return brand_logo:toggle() end,
     draw_text = draw_text, draw_seekbar = draw_seekbar,
     draw_shadowed_text = draw_shadowed_text,
     push_clip = function(bounds) ui_renderer:push_clip(bounds) end,
@@ -897,7 +915,7 @@ local animation_coordinator = animation_coordinator_module.new({
   hide_cursor = function() runtime_host:set_cursor_autohide("always") end,
   needs_display_rate = function()
     return subtitle_position:is_running() or runtime.snapshot.buffering or
-      runtime.ytdl.caption_loading_id ~= nil
+      runtime.ytdl.caption_loading_id ~= nil or brand_logo:is_animating()
   end
 })
 local function update_animation_targets(now)

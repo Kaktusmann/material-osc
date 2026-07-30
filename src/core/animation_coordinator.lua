@@ -88,6 +88,11 @@ function animation_coordinator.new(args)
       return "interaction"
     end
     if args.empty_state_visible and args.empty_state_visible() then
+      if runtime.playback_indicator.show_on_empty and
+        (runtime.playback_indicator.opacity:is_running() or
+          runtime.playback_indicator.scale:is_running()) then
+        return "interaction"
+      end
       return "dynamic"
     end
     if runtime.volume.animation:is_running() and

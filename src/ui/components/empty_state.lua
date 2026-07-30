@@ -3,11 +3,12 @@ local empty_state = {}
 function empty_state.new(services)
   local background_color = "#111318"
   local ui = services.ui
-  local dp, alpha = ui.dp, ui.alpha
+  local dp, alpha, lerp = ui.dp, ui.alpha, ui.lerp
   local Modifier, apply_modifier_size = ui.Modifier, ui.apply_modifier_size
   local draw_box, draw_icon, draw_text = ui.draw_box, ui.draw_icon, ui.draw_text
   local draw_brand_logo = ui.draw_brand_logo
   local default_text_font = ui.default_text_font
+  local opts = services.config.opts
   local current_version = tostring(services.updater.current_version or "")
     :gsub("^[vV]", "")
   if current_version == "__MATERIAL_OSC_VERSION__" then
@@ -33,6 +34,12 @@ function empty_state.new(services)
     "404 sleep not found", "there are 10 types of people", "ඞ"
   }
   local marquee_color = "#E2E2E6"
+  local marquee_hover_opacity = 0.10
+  local marquee_hover_duration = 0.3
+  local marquee_hover_states = {}
+  local marquee_collection_duration = 0.4
+  local marquee_collected_items = {}
+  local marquee_hovered_item
   local marquee_shears = {0, -0.035, -0.070, -0.105, -0.141, -0.176}
   local marquee_weights = {
     {value = 250, advance_scale = 1.02},
@@ -52,6 +59,68 @@ function empty_state.new(services)
   local marquee_seed = (os.time() * 1000 +
     math.floor((ui.now() % 1) * 1000)) % 1000003
 
+  local function blend_color(from, target, progress)
+    if progress <= 0 then return from end
+    if progress >= 1 then return target end
+    local fr, fg, fb = from:match("#?(%x%x)(%x%x)(%x%x)")
+    local tr, tg, tb = target:match("#?(%x%x)(%x%x)(%x%x)")
+    if not fr or not tr then return progress < 0.5 and from or target end
+    local function channel(a, b)
+      return math.floor(lerp(tonumber(a, 16), tonumber(b, 16), progress) + 0.5)
+    end
+    return string.format("#%02X%02X%02X",
+      channel(fr, tr), channel(fg, tg), channel(fb, tb))
+  end
+
+  local function marquee_hover_progress(key, hovered, now)
+    local state = marquee_hover_states[key]
+    if not state then
+      if not hovered then return 0 end
+      state = {from = 0, target = 1, started_at = now}
+      marquee_hover_states[key] = state
+    end
+
+    local elapsed = math.max(0, now - state.started_at)
+    local progress = math.min(1, elapsed / marquee_hover_duration)
+    local eased = progress * progress * (3 - 2 * progress)
+    local value = lerp(state.from, state.target, eased)
+    local target = hovered and 1 or 0
+    if target ~= state.target then
+      state.from, state.target, state.started_at = value, target, now
+      return value
+    end
+    if progress >= 1 then
+      if state.target == 0 then marquee_hover_states[key] = nil end
+      return state.target
+    end
+    return value
+  end
+
+  local function marquee_collection_progress(item, now)
+    local collected_at = marquee_collected_items[item.id]
+    if not collected_at then return 0 end
+    local progress = math.min(1,
+      math.max(0, now - collected_at) / marquee_collection_duration)
+    return progress * progress * (3 - 2 * progress)
+  end
+
+  local function collect_hovered_marquee_item()
+    local item = marquee_hovered_item
+    if not item or marquee_collected_items[item.id] then return end
+    local collected, count, reason = services.easter_eggs:collect(item.text)
+    if not collected then
+      if reason == "save-failed" then
+        services.playback_indicator:show_pill(
+          "error", "Could not save collection", ui.now(), true)
+      end
+      return
+    end
+    marquee_collected_items[item.id] = ui.now()
+    marquee_hovered_item = nil
+    services.playback_indicator:show_pill("trophy", string.format(
+      'Collected %d of "%s"', count, item.text), ui.now(), true)
+  end
+
   local function hashed_index(index, salt, count)
     local value = (index * 1103515245 + salt * 12345 +
       index * index * 2654435761 + marquee_seed * 69069) % 2147483647
@@ -63,6 +132,7 @@ function empty_state.new(services)
       hashed_index(index, 5, #marquee_weights)]
     local use_mpv = hashed_index(index, 1, 5) <= 2
     return {
+      id = index,
       text = use_mpv and "mpv" or
         easter_eggs[hashed_index(index, 2, #easter_eggs)],
       font_size = font_size,
@@ -122,12 +192,14 @@ function empty_state.new(services)
 
     marquee_layout_cache = {
       key = key,
+      row_height = row_height,
       rows = rows
     }
+    marquee_hover_states = {}
     return marquee_layout_cache
   end
 
-  local function draw_marquee(ass, bounds, opacity)
+  local function draw_marquee(ass, bounds, opacity, interactive)
     local center_x = bounds.x + bounds.w / 2
     local center_y = bounds.y + bounds.h / 2
     local rotated_width = math.abs(bounds.w * marquee_cos) +
@@ -143,7 +215,19 @@ function empty_state.new(services)
       h = rotated_height
     }
     local layout = build_marquee_layout(pattern_bounds)
-    for _, row in ipairs(layout.rows) do
+    local now = ui.now()
+    local seen_hover_states = {}
+    marquee_hovered_item = nil
+    local pointer_x, pointer_y
+    if interactive then
+      local screen_x = services.state.pointer.x - center_x
+      local screen_y = services.state.pointer.y - center_y
+      pointer_x = center_x + screen_x * marquee_cos +
+        screen_y * marquee_sin
+      pointer_y = center_y - screen_x * marquee_sin +
+        screen_y * marquee_cos
+    end
+    for row_index, row in ipairs(layout.rows) do
       local travel = (ui.now() * row.speed + row.phase * row.width) % row.width
       local start_x
       if row.direction < 0 then
@@ -153,33 +237,84 @@ function empty_state.new(services)
       end
       for copy = 0, 1 do
         local copy_x = start_x + copy * row.width
-        for _, item in ipairs(row.items) do
+        for item_index, item in ipairs(row.items) do
           if copy_x + item.x2 >= pattern_bounds.x and
               copy_x + item.x <= pattern_bounds.x2 then
             local item_x = copy_x + item.x
             local item_y = pattern_bounds.y + row.y
+            local hovered = pointer_x ~= nil and
+              not marquee_collected_items[item.id] and
+              pointer_x >= item_x and pointer_x <= copy_x + item.x2 and
+              pointer_y >= item_y - layout.row_height / 2 and
+              pointer_y <= item_y + layout.row_height / 2
+            local hover_key = string.format(
+              "%d:%d:%d", row_index, copy, item_index)
+            seen_hover_states[hover_key] = true
+            local hover_progress = marquee_hover_progress(
+              hover_key, hovered, now)
+            if hovered then marquee_hovered_item = item end
+            local collection_progress =
+              marquee_collection_progress(item, now)
             local relative_x = item_x - center_x
             local relative_y = item_y - center_y
             local rotated_x = center_x + relative_x * marquee_cos -
               relative_y * marquee_sin
             local rotated_y = center_y + relative_x * marquee_sin +
               relative_y * marquee_cos
-            draw_text(ass, rotated_x, rotated_y,
-              item.text, item.font_size, marquee_color,
-              alpha(opacity * 0.030), default_text_font, 4, false, true,
-              bounds, {
-                no_wrap = true,
-                weight = item.weight,
-                x_scale = item.x_scale,
-                shear = item.shear,
-                -- ASS positive rotation is counter-clockwise, while our
-                -- screen-space transform uses positive angles clockwise.
-                rotation = -marquee_rotation
-              })
+            if collection_progress < 1 then
+              draw_text(ass, rotated_x, rotated_y,
+                item.text, item.font_size,
+                blend_color(marquee_color, opts.accent_color, hover_progress),
+                alpha(opacity * lerp(
+                  0.030, marquee_hover_opacity, hover_progress) *
+                  (1 - collection_progress)),
+                default_text_font, 4, false, true,
+                bounds, {
+                  no_wrap = true,
+                  weight = item.weight,
+                  x_scale = item.x_scale,
+                  shear = item.shear,
+                  -- ASS positive rotation is counter-clockwise, while our
+                  -- screen-space transform uses positive angles clockwise.
+                  rotation = -marquee_rotation
+                })
+            end
           end
         end
       end
     end
+    for key in pairs(marquee_hover_states) do
+      if not seen_hover_states[key] then marquee_hover_states[key] = nil end
+    end
+  end
+
+  local function MarqueeGame()
+    local node = {
+      visible = false,
+      interactive = false,
+      modifier = Modifier():fillMaxWidth():fillMaxHeight():pointerArea({
+        name = "empty-state-marquee-game",
+        enabled = false,
+        keyboard = false,
+        on_click = collect_hovered_marquee_item
+      })
+    }
+
+    function node:update(visible, interactive)
+      self.visible = visible
+      self.interactive = interactive
+      self.modifier.pointer_enabled = visible and interactive
+    end
+
+    function node:measure(parent)
+      return apply_modifier_size(
+        self.modifier, {w = parent.w, h = parent.h}, parent)
+    end
+
+    function node:draw()
+    end
+
+    return node
   end
 
   local function ActionButton(args)
@@ -344,12 +479,42 @@ function empty_state.new(services)
     return node
   end
 
+  local function BrandLogo()
+    local node = {
+      visible = false,
+      interactive = false,
+      modifier = Modifier():pointerArea({
+        name = "empty-state-brand-logo",
+        enabled = false,
+        on_keyboard = ui.toggle_brand_logo,
+        on_click = ui.toggle_brand_logo
+      })
+    }
+
+    function node:update(visible, interactive)
+      self.visible = visible
+      self.interactive = interactive
+      self.modifier.pointer_enabled = visible and interactive
+    end
+
+    function node:measure(parent)
+      return apply_modifier_size(
+        self.modifier, {w = parent.w, h = parent.h}, parent)
+    end
+
+    function node:draw()
+    end
+
+    return node
+  end
+
   local node = {
     visible = false,
     interactive = false,
     opacity = 0,
     modifier = Modifier():fillMaxWidth():fillMaxHeight()
   }
+  node.marquee_game = MarqueeGame()
   node.files = ActionButton({
     name = "empty-state-files",
     icon = "folder_open",
@@ -367,13 +532,16 @@ function empty_state.new(services)
   end
   node.repository_logo = RepositoryLogo({on_click = open_repository})
   node.version = VersionLink({label = version_label, on_click = open_repository})
+  node.brand_logo = BrandLogo()
 
   function node:update(visible, interactive, opacity)
     self.visible = visible
     self.interactive = interactive
     self.opacity = opacity or (visible and 1 or 0)
+    self.marquee_game:update(visible, interactive)
     self.files:update(visible, interactive)
     self.link:update(visible, interactive)
+    self.brand_logo:update(visible, interactive)
     self.repository_logo.opacity = self.opacity
     self.repository_logo:update(visible and version_label ~= "", interactive)
     self.version.opacity = self.opacity
@@ -389,10 +557,7 @@ function empty_state.new(services)
       draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
         0, background_color, "00", true)
     end
-    if self.visible and ui.is_render_pass("dynamic") then
-      draw_marquee(ass, bounds, self.opacity)
-      return
-    end
+    ui.draw_node(self.marquee_game, ass, bounds)
     local layout_scale = math.min(1,
       bounds.w / math.max(dp(360), 1),
       bounds.h / math.max(dp(390), 1))
@@ -425,11 +590,24 @@ function empty_state.new(services)
     local top = bounds.y + (bounds.h - content_h) / 2
     local center_x = bounds.x + bounds.w / 2
     local content_alpha = alpha(self.opacity)
+    local lockup_x = center_x - lockup_width / 2
+    local brand_logo_bounds = ui.Rect({
+      x = lockup_x,
+      y = top,
+      w = logo_size,
+      h = logo_size
+    })
+
+    if self.visible and ui.is_render_pass("dynamic") then
+      draw_marquee(ass, bounds, self.opacity, self.interactive)
+      draw_brand_logo(ass,
+        brand_logo_bounds.x + brand_logo_bounds.w / 2,
+        brand_logo_bounds.y + brand_logo_bounds.h / 2,
+        logo_size, content_alpha, true)
+    end
+    ui.draw_node(self.brand_logo, ass, brand_logo_bounds)
 
     if self.visible and ui.is_render_pass("interaction") then
-      local lockup_x = center_x - lockup_width / 2
-      draw_brand_logo(ass, lockup_x + logo_size / 2, top + logo_size / 2,
-        logo_size, content_alpha, true)
       local text_x = lockup_x + logo_size + logo_gap
       draw_text(ass, text_x,
         top + logo_size / 2 - dp(30) * layout_scale,

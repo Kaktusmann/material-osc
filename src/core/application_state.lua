@@ -82,7 +82,7 @@ function application_state.new(args)
       ab_loop_initialized = false, last_ab_loop_a = nil,
       last_ab_loop_b = nil,
       icon = "play_arrow", label = nil, label_color = "#FFFFFF",
-      hide_timer = nil, pill_only = false
+      hide_timer = nil, pill_only = false, show_on_empty = false
     },
     ytdl = {
       active = false, source = nil, url = nil, items = {}, caption_items = {},

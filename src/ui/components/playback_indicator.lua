@@ -7,7 +7,7 @@ function playback_indicator.new(args)
   function service:show(icon, label, now, label_color)
     state.icon, state.label = icon, label
     state.label_color = label_color or "#FFFFFF"
-    state.pill_only = false
+    state.pill_only, state.show_on_empty = false, false
     state.opacity:snap(0); state.scale:snap(0.8)
     state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
     if state.hide_timer then state.hide_timer:kill() end
@@ -18,10 +18,11 @@ function playback_indicator.new(args)
     end)
   end
 
-  function service:show_pill(icon, label, now)
+  function service:show_pill(icon, label, now, show_on_empty)
     state.icon, state.label = icon, label
     state.label_color = "#FFFFFF"
     state.pill_only = true
+    state.show_on_empty = show_on_empty == true
     state.opacity:snap(0); state.scale:snap(0.92)
     state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
     if state.hide_timer then state.hide_timer:kill() end
@@ -145,7 +146,7 @@ function playback_indicator.new(args)
     state.ab_loop_initialized = false
     state.last_ab_loop_a, state.last_ab_loop_b = nil, nil
     state.label = nil
-    state.pill_only = false
+    state.pill_only, state.show_on_empty = false, false
     state.opacity:snap(0); state.scale:snap(1)
   end
 
