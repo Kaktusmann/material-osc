@@ -18,15 +18,18 @@ function playback_indicator.new(args)
     end)
   end
 
-  function service:show_pill(icon, label, now, show_on_empty)
+  function service:show_pill(icon, label, now, options)
+    if type(options) ~= "table" then
+      options = {show_on_empty = options == true}
+    end
     state.icon, state.label = icon, label
-    state.label_color = "#FFFFFF"
+    state.label_color = options.label_color or "#FFFFFF"
     state.pill_only = true
-    state.show_on_empty = show_on_empty == true
+    state.show_on_empty = options.show_on_empty == true
     state.opacity:snap(0); state.scale:snap(0.92)
     state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
     if state.hide_timer then state.hide_timer:kill() end
-    state.hide_timer = mp.add_timeout(1.4, function()
+    state.hide_timer = mp.add_timeout(options.duration or 1.4, function()
       state.hide_timer = nil
       state.opacity:set_target(0, mp.get_time(), 0.20)
       args.render()

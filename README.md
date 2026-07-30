@@ -21,7 +21,7 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 `script-opts` directory. You can also open file from **Right-click → Configurations**.
 
 <details>
-<summary>Show Options</summary>
+<summary>Appearance and controls</summary>
 
 | Option | Default | Accepted values | Description |
 | --- | --- | --- | --- |
@@ -33,6 +33,23 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `screenshot_button` | `yes` | `yes`, `no` | Shows or hides the screenshot button in the playback controls. |
 | `pip_button` | `yes` | `yes`, `no` | Shows or hides the Picture-in-Picture button in the playback controls. |
 | `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
+
+##### Window controls
+
+With `window_controls=auto`, material-osc provides minimize, maximize/restore,
+and close buttons when mpv runs without native window decorations (`border=no`
+in `mpv.conf`) or enters fullscreen.
+
+The script disables automatic window resizing and starts the window at 66% of
+the screen height. Its width is calculated from the video's aspect ratio.
+
+</details>
+
+<details>
+<summary>Playback and interaction</summary>
+
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
 | `mouse_timeout` | `2` | Seconds; `0` disables timeout | Controls how long the UI remains visible after pointer activity. |
 | `show_on_mouse_move` | `no` | `yes`, `no` | With `yes`, movement anywhere reveals the UI. With `no`, use the bottom edge for playback controls or the top edge for window controls. |
 | `single_click_actions_enabled` | `yes` | `yes`, `no` | Enables single-click play/pause and left/right edge seeking. Double-click fullscreen remains available when disabled. |
@@ -40,27 +57,91 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
 | `temporary_speed` | `2` | Playback rate greater than `0` | Sets the speed used while the `hold-double-speed` binding is held. |
 | `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. |
+
+</details>
+
+<details>
+<summary>Intro and outro chapter skipping</summary>
+
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
+| `skip_intro_outro_chapters` | `ask` | `yes`, `no`, `ask` | Controls detected local-media intro and outro chapters. |
+| `skip_intro_detection_texts` | `intro,introduction,opening,op,opening theme` | Comma-separated text | Chapter-title text detected as an intro. |
+| `skip_outro_detection_texts` | `outro,ending,end credits,credits,closing,ed` | Comma-separated text | Chapter-title text detected as an outro. |
+
+Detection is case-insensitive. Each entry matches an exact chapter title or a
+title prefix followed by whitespace, a colon, a hyphen, an en dash, or an em
+dash. An empty list disables detection for that chapter type.
+
+</details>
+
+<details>
+<summary>mpv behavior</summary>
+
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
 | `force_hwdec` | `no` | `yes`, `no` | With `no`, preserves mpv's configured `hwdec` value. Set to `yes` to opt into `hwdec=auto`; this may be unstable with some live streams and hybrid-GPU systems. |
 | `force_display_resample` | `yes` | `yes`, `no` | With `no`, preserves mpv's configured `video-sync` value. Set to `yes` to opt into `video-sync=display-resample`. |
 | `force_force_window` | `yes` | `yes`, `no` | Keeps an mpv window open even before a file is loaded. With `no`, material-osc preserves the configured `force-window` value. |
-| `directory_playlist` | `yes` | `yes`, `no` | Adds nearby video and audio files when opening a local file, unless a multi-item playlist already exists. |
-| `directory_playlist_sort` | `name` | `name`, `newest`, `oldest` | Selects how automatically discovered directory entries are ordered. |
-| `youtube_quality` | `auto` | `auto` or a vertical resolution such as `1080` | Sets the maximum quality used when initially loading YouTube videos. `auto` preserves mpv's configured `ytdl-format`. |
 
 </details>
+
+<details>
+<summary>Playlist</summary>
+
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
+| `directory_playlist` | `yes` | `yes`, `no` | Adds nearby video and audio files when opening a local file, unless a multi-item playlist already exists. |
+| `directory_playlist_sort` | `name` | `name`, `newest`, `oldest` | Selects how automatically discovered directory entries are ordered. |
+
+</details>
+
+<details>
+<summary>YouTube</summary>
+
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
+| `youtube_quality` | `auto` | `auto` or a vertical resolution such as `1080` | Sets the maximum quality used when initially loading YouTube videos. `auto` preserves mpv's configured `ytdl-format`. |
 
 YouTube watch links containing a `list` parameter load the full playlist and
 start at the linked video. To keep mpv's single-video behavior, explicitly set
 `ytdl-raw-options=no-playlist=` in `mpv.conf`.
 
-### Window controls
+</details>
 
-With `window_controls=auto`, material-osc provides minimize, maximize/restore, and
-close buttons when mpv runs without native window decorations (`border=no` in
-`mpv.conf`) or enters fullscreen.
+<details>
+<summary>SponsorBlock</summary>
 
-The script disables automatic window resizing and starts the window at 66% of
-the screen height. Its width is calculated from the video's aspect ratio.
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
+| `sponsorblock_should_use` | `yes` | `yes`, `no` | Enables SponsorBlock loading, skipping, prompts, markers, voting, and submission for YouTube videos. |
+| `sponsorblock_auto_skip_categories` | `sponsor` | Comma-separated category IDs | Categories that are skipped automatically. |
+| `sponsorblock_ignore_categories` | `interaction,preview,hook,exclusive_access` | Comma-separated category IDs | Categories that are not loaded or acted upon. Ignore takes precedence when a category is also listed for auto-skip. |
+| `sponsorblock_multicolored_segments` | `yes` | `yes`, `no` | Colors seekbar segments by category. When disabled, all segments use yellow. |
+| `sponsorblock_show_submit` | `yes` | `yes`, `no` | Shows SponsorBlock segment marking, category, and submission controls. |
+| `sponsorblock_show_voting` | `yes` | `yes`, `no` | Shows upvote and downvote controls after skipping a submitted SponsorBlock segment. |
+
+SponsorBlock category lists accept `sponsor`, `selfpromo`, `exclusive_access`,
+`interaction`, `intro`, `outro`, `preview`, `hook`, `music_offtopic`,
+`poi_highlight`, and `filler`. Any supported category absent from both lists
+defaults to Ask and shows persistent Skip/Dismiss controls.
+
+SponsorBlock skip prompts are rendered beside the playlist and media title.
+Their active skip button remains available after the rest of the controller
+fades. Voting and Undo appear in the same inline row after a skip, while marking
+and submission controls appear in the bottom-right control row. These actions
+are also exposed as script bindings:
+
+```conf
+g script-binding material_osc/sponsorblock-set-segment
+G script-binding material_osc/sponsorblock-submit-segment
+h script-binding material_osc/sponsorblock-upvote
+H script-binding material_osc/sponsorblock-downvote
+```
+
+</details>
+
+### Thumbnail previews
 
 Thumbnail previews require [Thumbfast](https://github.com/po5/thumbfast). Install
 `thumbfast.lua` in mpv's `scripts` directory alongside material-osc. Thumbnail

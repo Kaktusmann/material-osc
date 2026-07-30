@@ -99,6 +99,12 @@ function controller.new(args)
       runtime.pointer.window_dragging then
       return true
     end
+    local hovered = args.hitbox_at_cursor and args.hitbox_at_cursor() or nil
+    if hovered == "seekbar" or
+      (type(hovered) == "string" and
+        hovered:match("^youtube%-")) then
+      return true
+    end
     for _, name in ipairs(args.navigation.dialogs) do
       if runtime[name].open then return true end
     end

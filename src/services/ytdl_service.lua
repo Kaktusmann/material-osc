@@ -108,7 +108,7 @@ function ytdl_service.new(args)
       if success and (not result or result.status == nil or result.status == 0) then
         args.set_settings_page("subtitles")
       else
-        mp.osd_message("Failed to load auto subtitle", 3)
+        args.toast:error("Failed to load auto subtitle", {duration = 3})
       end
       args.render()
     end)

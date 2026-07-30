@@ -1,5 +1,9 @@
 local context_actions = {}
 
+local SPONSORBLOCK_CATEGORIES_COMMENT =
+  "# SponsorBlock categories: sponsor,selfpromo,exclusive_access,interaction," ..
+  "intro,outro,preview,hook,music_offtopic,poi_highlight,filler"
+
 local function sanitize_configuration(existing, order)
   local allowed = {}
   for _, name in ipairs(order) do
@@ -57,8 +61,11 @@ function context_actions.new(args)
   local function copy(value, message)
     if not value or value == "" then return end
     local ok, result = pcall(mp.set_property, "clipboard", value)
-    mp.osd_message(ok and result ~= false and message or
-      "Clipboard is unavailable", 2)
+    if ok and result ~= false then
+      args.toast:success(message, {icon = "content_copy", duration = 2})
+    else
+      args.toast:error("Clipboard is unavailable", {duration = 2})
+    end
   end
 
   local function launch(target, reveal)
@@ -82,7 +89,7 @@ function context_actions.new(args)
       capture_stdout = true, capture_stderr = true
     }, function(success, result)
       if not success or not result or result.status ~= 0 then
-        mp.osd_message("Could not open " .. target, 2)
+        args.toast:error("Could not open " .. target, {duration = 2})
       end
     end)
   end
@@ -145,7 +152,8 @@ function context_actions.new(args)
   function service:open_configurations()
     local config_dir = mp.command_native({"expand-path", "~~home/script-opts"})
     if not config_dir or config_dir == "" then
-      mp.osd_message("mpv configuration directory is unavailable", 2)
+      args.toast:error(
+        "mpv configuration directory is unavailable", {duration = 2})
       return
     end
     if not utils.file_info(config_dir) then
@@ -160,7 +168,8 @@ function context_actions.new(args)
         capture_stdout = true, capture_stderr = true
       })
       if not result or result.status ~= 0 then
-        mp.osd_message("Could not create script-opts directory", 2)
+        args.toast:error(
+          "Could not create script-opts directory", {duration = 2})
         return
       end
     end
@@ -188,12 +197,21 @@ function context_actions.new(args)
       "seek_step_seconds",
       "temporary_speed",
       "max_volume_percentage",
+      "skip_intro_outro_chapters",
+      "skip_intro_detection_texts",
+      "skip_outro_detection_texts",
       "force_hwdec",
       "force_display_resample",
       "force_force_window",
       "directory_playlist",
       "directory_playlist_sort",
-      "youtube_quality"
+      "youtube_quality",
+      "sponsorblock_should_use",
+      "sponsorblock_auto_skip_categories",
+      "sponsorblock_ignore_categories",
+      "sponsorblock_multicolored_segments",
+      "sponsorblock_show_submit",
+      "sponsorblock_show_voting"
     }
     local preserved, configured, removed_unused =
       sanitize_configuration(existing, order)
@@ -217,12 +235,21 @@ function context_actions.new(args)
         lines[#lines + 1] = "# Changes are applied to running mpv instances."
         lines[#lines + 1] = ""
       end
+      local category_comment_added =
+        preserved:find(SPONSORBLOCK_CATEGORIES_COMMENT, 1, true) ~= nil
       for _, name in ipairs(missing) do
+        if not category_comment_added and
+          (name == "sponsorblock_auto_skip_categories" or
+            name == "sponsorblock_ignore_categories") then
+          lines[#lines + 1] = SPONSORBLOCK_CATEGORIES_COMMENT
+          category_comment_added = true
+        end
         lines[#lines + 1] = name .. "=" .. config_value(args.opts[name])
       end
       local file = io.open(config_path, "wb")
       if not file then
-        mp.osd_message("Could not create material-osc.conf", 2)
+        args.toast:error(
+          "Could not create material-osc.conf", {duration = 2})
         return
       end
       file:write(table.concat(lines, "\n"), "\n")

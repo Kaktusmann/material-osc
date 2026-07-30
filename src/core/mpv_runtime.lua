@@ -137,6 +137,7 @@ function mpv_runtime.new(args)
     end
     args.stream_quality:load()
     args.stream_quality:restore_subtitles()
+    if args.sponsorblock then args.sponsorblock:load() end
     args.bookmarks:restore()
     args.render()
   end
@@ -240,6 +241,7 @@ function mpv_runtime.new(args)
         args.update_cached_property("time-pos", value)
       end
       state.properties["time-pos"] = value
+      if args.sponsorblock then args.sponsorblock:on_time_pos(value) end
       if not playback_visual_changed(value) then return end
       if state.controller.opacity.value > 0.001 then
         if state.timers.progress then state.timers.progress:kill() end
@@ -375,10 +377,12 @@ function mpv_runtime.new(args)
     end)
     mp.register_event("start-file", function()
       state.media.loading = true
+      if args.sponsorblock then args.sponsorblock:reset() end
       args.render()
     end)
     mp.register_event("end-file", function()
       state.media.loading = true
+      if args.sponsorblock then args.sponsorblock:reset() end
       args.render()
     end)
     mp.register_event("shutdown", function()

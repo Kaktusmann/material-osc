@@ -110,15 +110,19 @@ function empty_state.new(services)
     local collected, count, reason = services.easter_eggs:collect(item.text)
     if not collected then
       if reason == "save-failed" then
-        services.playback_indicator:show_pill(
-          "error", "Could not save collection", ui.now(), true)
+        services.toast:error("Could not save collection", {
+          show_on_empty = true
+        })
       end
       return
     end
     marquee_collected_items[item.id] = ui.now()
     marquee_hovered_item = nil
-    services.playback_indicator:show_pill("trophy", string.format(
-      'Collected %d of "%s"', count, item.text), ui.now(), true)
+    services.toast:success(string.format(
+      'Collected %d of "%s"', count, item.text), {
+        icon = "trophy",
+        show_on_empty = true
+      })
   end
 
   local function hashed_index(index, salt, count)

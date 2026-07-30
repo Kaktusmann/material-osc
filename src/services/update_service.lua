@@ -338,7 +338,7 @@ function update_service.new(args)
       command = {"xdg-open", url}
     end
     subprocess(command, function(ok)
-      if not ok then mp.osd_message(error_message, 2) end
+      if not ok then args.toast:error(error_message, {duration = 2}) end
     end)
   end
 

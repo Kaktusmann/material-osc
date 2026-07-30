@@ -1,6 +1,6 @@
 local options = require "mp.options"
 local opts = {
-  -- Appearance and controls
+  -- Appearance
   dpi_scale = "auto",
   accent_color = "#00bbff",
   context_menu = true,
@@ -10,7 +10,12 @@ local opts = {
   pip_button = true,
   window_controls = "auto",
 
-  -- Interaction
+  -- Behavior
+  skip_intro_outro_chapters = "ask",
+  skip_intro_detection_texts =
+    "intro,introduction,opening,op,opening theme",
+  skip_outro_detection_texts =
+    "outro,ending,end credits,credits,closing,ed",
   mouse_timeout = 2,
   show_on_mouse_move = false,
   single_click_actions_enabled = true,
@@ -18,16 +23,22 @@ local opts = {
   seek_step_seconds = 5,
   temporary_speed = 2,
   max_volume_percentage = 150,
+  directory_playlist = true,
+  directory_playlist_sort = "name",
 
-  -- Window Behavior
+  -- Force mpv options
   force_hwdec = false,
   force_display_resample = true,
   force_force_window = true,
 
-  -- Playlist behavior
-  directory_playlist = true,
-  directory_playlist_sort = "name",
-  youtube_quality = "auto"
+  -- YouTube
+  youtube_quality = "auto",
+  sponsorblock_should_use = true,
+  sponsorblock_auto_skip_categories = "sponsor",
+  sponsorblock_ignore_categories = "interaction,preview,hook,exclusive_access",
+  sponsorblock_multicolored_segments = true,
+  sponsorblock_show_submit = true,
+  sponsorblock_show_voting = true
 }
 local option_defaults = {}
 for name, value in pairs(opts) do option_defaults[name] = value end
@@ -58,6 +69,41 @@ local function normalize_option_values(values)
   local height = youtube_quality:match("^(%d+)p?$")
   values.youtube_quality = height and tostring(math.max(1,
     math.floor(tonumber(height)))) or "auto"
+  local category_options = {
+    "sponsorblock_auto_skip_categories",
+    "sponsorblock_ignore_categories"
+  }
+  for _, name in ipairs(category_options) do
+    local categories, seen = {}, {}
+    for category in tostring(values[name] or ""):lower():gmatch("[%w_]+") do
+      if not seen[category] then
+        seen[category] = true
+        categories[#categories + 1] = category
+      end
+    end
+    values[name] = table.concat(categories, ",")
+  end
+  for _, name in ipairs({
+    "skip_intro_detection_texts",
+    "skip_outro_detection_texts"
+  }) do
+    local texts, seen = {}, {}
+    for raw_text in tostring(values[name] or ""):gmatch("[^,]+") do
+      local text = raw_text:lower():match("^%s*(.-)%s*$")
+      if text ~= "" and not seen[text] then
+        seen[text] = true
+        texts[#texts + 1] = text
+      end
+    end
+    values[name] = table.concat(texts, ",")
+  end
+  for name, fallback in pairs({skip_intro_outro_chapters = "ask"}) do
+    local value = tostring(values[name] or fallback):lower()
+    if value ~= "yes" and value ~= "no" and value ~= "ask" then
+      value = fallback
+    end
+    values[name] = value
+  end
   return values
 end
 options.read_options(opts, "material-osc", function(changed)
@@ -122,6 +168,7 @@ local assets = require "src.services.assets"
 local player_module = require "src.services.player"
 local directory_playlist_module = require "src.services.directory_playlist"
 local stream_quality_module = require "src.services.stream_quality"
+local sponsorblock_module = require "src.services.sponsorblock"
 local media_loader_module = require "src.services.media_loader"
 local subtitle_loader_module = require "src.services.subtitle_loader"
 local shader_loader_module = require "src.services.shader_loader"
@@ -131,6 +178,7 @@ local easter_egg_collection_module =
   require "src.services.easter_egg_collection"
 local context_actions_module = require "src.services.context_actions"
 local keybinding_hints_module = require "src.services.keybinding_hints"
+local toast_service_module = require "src.services.toast"
 local temporary_speed_module = require "src.services.temporary_speed"
 local subtitle_position_module = require "src.services.subtitle_position"
 local update_service_module = require "src.services.update_service"
@@ -182,7 +230,9 @@ local function create_app(services)
   }
   node.video = controls.VideoSurface()
   node.empty_state = empty_state_module.new(services)
-  node.playlist_controls = playlist_module.new(services)
+  node.youtube_actions = controls.YouTubeActions()
+  node.playlist_controls =
+    playlist_module.new(services, node.youtube_actions)
   node.seekbar = controls.SeekBar()
   node.controls = controls.ControlsRow()
   node.pip_control = controls.PipControl()
@@ -212,6 +262,7 @@ local function create_app(services)
     local static_changed = self.snapshot_revision ~= snapshot._revision
     self.snapshot_revision = snapshot._revision
     self:update_video_presence(snapshot)
+    self.youtube_actions:update(state.seek.position_pill_visible)
     self.controls:update(snapshot, static_changed)
     if static_changed then self.window_controls:update(snapshot) end
     if static_changed or state.playlist.open or
@@ -257,7 +308,25 @@ local function create_app(services)
 
   function node:update_dynamic(snapshot)
     self:update_video_presence(snapshot)
+    self.youtube_actions:update(state.seek.position_pill_visible)
     self.controls:update(snapshot, false)
+  end
+
+  function node:persistent_action_bounds(root)
+    self.youtube_actions:update(state.seek.position_pill_visible)
+    local action_size = ui.measure_node(self.youtube_actions, root)
+    if action_size.h <= 0 then return nil end
+    local controls_size = ui.measure_node(self.controls, root)
+    local seekbar_size = ui.measure_node(self.seekbar, root)
+    local playlist_size = ui.measure_node(self.playlist_controls, root)
+    local playlist_y = root.y2 - ui.dp(12) - controls_size.h -
+      seekbar_size.h - playlist_size.h
+    return ui.Rect({
+      x = root.x2 - ui.dp(12) - action_size.w,
+      y = playlist_y + (playlist_size.h - action_size.h) / 2,
+      w = action_size.w,
+      h = action_size.h
+    })
   end
 
   function node:update_interaction(snapshot)
@@ -397,8 +466,16 @@ local function create_app(services)
     local pointer_x, pointer_y = state.pointer.x, state.pointer.y
     if modal_is_open() then state.pointer.x, state.pointer.y = -1, -1 end
     if not state.pip.active and state.controller.opacity.value > 0 then
+      if self.youtube_actions.bounds then
+        self.youtube_actions:draw(ass, self.youtube_actions.bounds)
+      end
+      -- Keep seek hover previews above inline SponsorBlock actions when their
+      -- bounds overlap.
       if self.seekbar.bounds then self.seekbar:draw(ass, self.seekbar.bounds) end
       self.controls:draw_dynamic(ass)
+    elseif not state.pip.active then
+      local bounds = self:persistent_action_bounds(root)
+      if bounds then ui.draw_node(self.youtube_actions, ass, bounds) end
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
   end
@@ -419,6 +496,9 @@ local function create_app(services)
       if not self.empty_visible then
         ui.draw_node(self.controller, ass, root)
       end
+    elseif not state.pip.active and not self.empty_visible then
+      local bounds = self:persistent_action_bounds(root)
+      if bounds then ui.draw_node(self.youtube_actions, ass, bounds) end
     end
     if state.window_controls.bounds and state.controller.opacity.value > 0 then
       ui.draw_node(self.window_controls, ass, root)
@@ -485,6 +565,9 @@ local function create_app(services)
 
   function node:has_visible_overlay()
     if state.pip.active then return true end
+    if state.sponsorblock.prompt or
+      state.sponsorblock.actions_opacity.value > 0.001 or
+      state.sponsorblock.actions_opacity:is_running() then return true end
     if not self.empty_visible and opts.show_mini_seekbar and
       (state.snapshot.duration or 0) > 0 and
       state.controller.opacity.value < 0.999 then
@@ -671,6 +754,12 @@ menu_keyboard = menu_keyboard_module.new({
   render = function() if render then render() end end
 })
 
+local toast_service = toast_service_module.new({
+  mp = mp,
+  render = function()
+    if render then render(false, "interaction") end
+  end
+})
 local subtitle_loader = subtitle_loader_module.new({
   render = function(...) return render(...) end
 })
@@ -680,6 +769,7 @@ local open_secondary_subtitle_file_picker = subtitle_loader.open_secondary_file_
 local open_secondary_subtitle_link_picker = subtitle_loader.open_secondary_link_picker
 local shader_loader = shader_loader_module.new({
   mp = mp, utils = utils, msg = msg,
+  toast = toast_service,
   render = function(...) return render(...) end
 })
 local media_loader = media_loader_module.new({
@@ -687,8 +777,10 @@ local media_loader = media_loader_module.new({
 })
 
 local controller
+local playback_indicator
 local bookmark_service = bookmark_service_module.new({
   mp = mp, utils = utils, format_time = format_time,
+  toast = toast_service,
   render = function(...) return render(...) end,
   set_input_active = function(active)
     runtime.controller.input_suppressed = active
@@ -713,17 +805,28 @@ local easter_egg_collection = easter_egg_collection_module.new({
 local context_actions = context_actions_module.new({
   mp = mp, utils = utils, format_time = format_time,
   bookmarks = bookmark_service, opts = opts, properties = runtime.properties,
+  toast = toast_service,
   render = function(...) return render(...) end
 })
 
 local stream_quality = stream_quality_module.new({
   runtime = runtime, utils = utils,
+  toast = toast_service,
   render = function(...) return render(...) end,
   set_settings_page = set_settings_page,
   before_quality_reload = function()
     manual_stream_quality_reload = true
   end
 })
+local sponsorblock_service = sponsorblock_module.new({
+  runtime = runtime,
+  opts = opts,
+  utils = utils,
+  toast = toast_service,
+  youtube_url = function() return runtime.ytdl.url end,
+  render = function() if render then render(false) end end
+})
+sponsorblock_service:register_bindings()
 local directory_playlist = directory_playlist_module.new({
   mp = mp, utils = utils, opts = opts
 })
@@ -773,6 +876,9 @@ thumbnail_service, draw_thumbnail_preview = thumbnail_module.new({
   get_snapshot = function() return runtime.snapshot end,
   utils = utils, msg = msg, dp = dp, clamp = clamp,
   format_time = format_time, chapter_name_at = chapter_name_at,
+  sponsorblock_preview_at = function(position)
+    return sponsorblock_service:preview_at(position)
+  end,
   enqueue_effect = enqueue_effect,
   render = function(...) return render(...) end,
   draw_box = function(...) return draw_box(...) end,
@@ -786,6 +892,10 @@ draw_seekbar = seekbar_renderer_module.new({
   draw_boxes = draw_boxes,
   seek_pos_from_mouse = seek_pos_from_mouse,
   draw_thumbnail_preview = draw_thumbnail_preview,
+  sponsorblock_category_style = sponsorblock_module.category_style,
+  sponsorblock_should_render = function(category)
+    return sponsorblock_service:should_render_segment(category)
+  end,
   enqueue_effect = enqueue_effect, thumbnail_service = thumbnail_service
 })
 
@@ -826,6 +936,7 @@ local Visibility, Row, Column, Pill =
 local ConnectedPill = compose.ConnectedPill
 local updater = update_service_module.new({
   state = runtime, mp = mp, utils = utils, msg = msg,
+  toast = toast_service,
   script_path = script_source, font_dir = asset_paths.release_font_dir,
   render = function() if render then render() end end
 })
@@ -835,6 +946,8 @@ local services = {
   bookmarks = bookmark_service,
   easter_eggs = easter_egg_collection,
   context_actions = context_actions,
+  sponsorblock = sponsorblock_service,
+  toast = toast_service,
   close_context_menu = close_context_menu,
   config = {
     opts = opts,
@@ -906,10 +1019,11 @@ local services = {
   }
 }
 services.keybinding_hints = keybinding_hints
-local playback_indicator = playback_indicator_module.new({
+playback_indicator = playback_indicator_module.new({
   state = runtime.playback_indicator, mp = mp, ui = services.ui,
   render = function() render() end
 })
+toast_service:bind(playback_indicator)
 services.playback_indicator = playback_indicator
 services.loading = {draw = draw_loading_shape_morph}
 local temporary_speed = temporary_speed_module.new({
@@ -957,6 +1071,7 @@ runtime_host = mpv_runtime_module.new({
   menu_keyboard = menu_keyboard,
   playback_indicator = playback_indicator,
   stream_quality = stream_quality,
+  sponsorblock = sponsorblock_service,
   directory_playlist = directory_playlist,
   bookmarks = bookmark_service,
   temporary_speed = temporary_speed,
@@ -1155,6 +1270,16 @@ options_update_handler = function(changed)
     apply_forced_mpv_options()
   end
   if changed.temporary_speed then temporary_speed:update_target() end
+  if changed.sponsorblock_should_use or
+    changed.sponsorblock_auto_skip_categories or
+    changed.sponsorblock_ignore_categories or
+    changed.sponsorblock_show_submit or
+    changed.sponsorblock_show_voting or
+    changed.skip_intro_outro_chapters or
+    changed.skip_intro_detection_texts or
+    changed.skip_outro_detection_texts then
+    sponsorblock_service:on_options_changed(changed)
+  end
   if changed.dpi_scale or changed.single_click_actions_enabled or
     changed.seeking_zone_percentage or changed.seek_step_seconds or
     changed.max_volume_percentage then
@@ -1190,6 +1315,7 @@ config_watcher = config_watcher_module.new({
 })
 mp.register_event("shutdown", function() config_watcher:stop() end)
 mp.register_event("shutdown", function() subtitle_position:dispose() end)
+mp.register_event("shutdown", function() sponsorblock_service:dispose() end)
 if performance then
   mp.register_event("shutdown", function()
     msg.warn(string.format(

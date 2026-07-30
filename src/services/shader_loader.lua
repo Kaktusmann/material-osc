@@ -94,7 +94,8 @@ function shader_loader.new(args)
       "expand-path", "~~/cache/material-osc/shaders"
     })
     if not directory or directory == "" or not ensure_directory(directory) then
-      mp.osd_message("Could not create the shader cache directory", 3)
+      args.toast:error(
+        "Could not create the shader cache directory", {duration = 3})
       return
     end
     local filename = url:gsub("[?#].*$", ""):match("([^/\\]+)$") or "shader.glsl"
@@ -120,7 +121,7 @@ function shader_loader.new(args)
               else
                 msg.error("shader download failed: " ..
                   tostring(ps_result and ps_result.stderr or "unknown error"))
-                mp.osd_message("Shader download failed", 3)
+                args.toast:error("Shader download failed", {duration = 3})
               end
             end)
         return
@@ -131,7 +132,7 @@ function shader_loader.new(args)
       else
         msg.error("shader download failed: " ..
           tostring(result and result.stderr or "unknown error"))
-        mp.osd_message("Shader download failed", 3)
+        args.toast:error("Shader download failed", {duration = 3})
       end
     end)
   end

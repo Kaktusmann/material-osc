@@ -86,7 +86,9 @@ function bookmarks.new(args)
     for _, entry in ipairs(previous_entries) do entries[#entries + 1] = entry end
     for _, entry in ipairs(entries) do
       if math.abs((tonumber(entry.time) or 0) - position) < 0.5 then
-        mp.osd_message("Bookmark already exists", 2)
+        args.toast:info("Bookmark already exists", {
+          icon = "bookmark", duration = 2
+        })
         return false
       end
     end
@@ -110,11 +112,13 @@ function bookmarks.new(args)
     self.data[key] = entries
     if not write_database(self.data) then
       self.data[key] = previous_entries
-      mp.osd_message("Could not save bookmark", 2)
+      args.toast:error("Could not save bookmark", {duration = 2})
       return false
     end
     self:apply()
-    mp.osd_message("Bookmark added at " .. args.format_time(position), 2)
+    args.toast:success(
+      "Bookmark added at " .. args.format_time(position),
+      {icon = "bookmark", duration = 2})
     args.render()
     return true
   end
@@ -154,11 +158,13 @@ function bookmarks.new(args)
     self.data[key] = #entries > 0 and entries or nil
     if not write_database(self.data) then
       self.data[key] = previous_entries
-      mp.osd_message("Could not remove bookmark", 2)
+      args.toast:error("Could not remove bookmark", {duration = 2})
       return false
     end
     self:apply()
-    mp.osd_message("Bookmark removed", 2)
+    args.toast:success("Bookmark removed", {
+      icon = "bookmark", duration = 2
+    })
     args.render()
     return true
   end
@@ -167,7 +173,7 @@ function bookmarks.new(args)
     if not chapter or not self.current_key then return false end
     title = tostring(title or ""):match("^%s*(.-)%s*$")
     if title == "" then
-      mp.osd_message("Bookmark name cannot be empty", 2)
+      args.toast:warning("Bookmark name cannot be empty", {duration = 2})
       return false
     end
     local entries = self.data[self.current_key] or {}
@@ -186,11 +192,13 @@ function bookmarks.new(args)
     entry.title = title
     if not write_database(self.data) then
       entry.title = previous_title
-      mp.osd_message("Could not rename bookmark", 2)
+      args.toast:error("Could not rename bookmark", {duration = 2})
       return false
     end
     self:apply()
-    mp.osd_message("Bookmark renamed", 2)
+    args.toast:success("Bookmark renamed", {
+      icon = "bookmark", duration = 2
+    })
     args.render()
     return true
   end

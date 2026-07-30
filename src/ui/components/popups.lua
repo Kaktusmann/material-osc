@@ -1554,7 +1554,8 @@ end
     local params = mp.get_property_native("video-dec-params") or {}
     local width, height = tonumber(params.w), tonumber(params.h)
     if not width or not height or width <= 0 or height <= 0 then
-      mp.osd_message("Video dimensions are unavailable", 2)
+      services.toast:error(
+        "Video dimensions are unavailable", {duration = 2})
       return
     end
     local pixel_aspect = 1

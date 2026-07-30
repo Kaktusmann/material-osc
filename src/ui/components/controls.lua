@@ -12,6 +12,7 @@ function controls.new(services)
   local smooth_step, lerp = ui.smooth_step, ui.lerp
   local ass_alpha_for_opacity = ui.alpha
   local draw_rect, draw_box, draw_text = ui.draw_rect, ui.draw_box, ui.draw_text
+  local draw_icon = ui.draw_icon
   local draw_seekbar, mouse_in = ui.draw_seekbar, ui.mouse_in
   local text_width, format_time = ui.text_width, ui.format_time
   local render = services.effects.render
@@ -324,6 +325,296 @@ function controls.new(services)
     return node
   end
 
+  local function YouTubeActions()
+    local node = {
+      actions = {},
+      chips = {},
+      persistent = false,
+      suppressed = false,
+      action_signature = "",
+      modifier = Modifier():height(dp(36))
+    }
+
+    local function actions_signature(actions)
+      local values = {}
+      for index, action in ipairs(actions) do
+        values[index] = table.concat({
+          tostring(action.name or ""),
+          tostring(action.label or ""),
+          action.compact and "1" or "0"
+        }, "\0")
+      end
+      return table.concat(values, "\1")
+    end
+
+    local function ActionChip(index)
+      local chip = {
+        action = nil,
+        persistent = false,
+        suppressed = false,
+        opacity = 1
+      }
+      chip.modifier = Modifier():height(dp(36)):clickable({
+        name = "youtube-action-" .. tostring(index),
+        enabled = false,
+        on_click = function()
+          local action = chip.action
+          if action and action.enabled ~= false and action.on_click then
+            action.on_click()
+          end
+        end
+      })
+      chip.modifier.render_pass = "dynamic"
+
+      function chip:update(action, persistent, suppressed, opacity)
+        self.action, self.persistent = action, persistent
+        self.suppressed = suppressed == true
+        self.opacity = clamp(tonumber(opacity) or 1, 0, 1)
+        self.modifier.pointer_enabled =
+          not self.suppressed and action ~= nil and action.enabled ~= false
+        local hitbox = state.input.hitboxes[self.modifier.pointer_name]
+        if hitbox then hitbox.enabled = self.modifier.pointer_enabled end
+      end
+
+      function chip:measure(parent)
+        local action = self.action
+        if not action then return {w = 0, h = 0} end
+        local label = tostring(action.label or "")
+        local width = action.compact and dp(36) or
+          math.max(dp(44), dp(38) + text_width(label, 19) + dp(12))
+        return apply_modifier_size(
+          self.modifier, {w = width, h = dp(36)}, parent)
+      end
+
+      function chip:draw(ass, bounds)
+        local action = self.action
+        local opacity = self.opacity
+        if not action or opacity <= 0.001 then return end
+        local ignore_fade = self.persistent
+        local function faded_alpha(value)
+          local base_opacity =
+            1 - (tonumber(value or "00", 16) or 0) / 255
+          return ass_alpha_for_opacity(base_opacity * opacity)
+        end
+        if is_render_pass("dynamic") then
+          local color =
+            action.selected and config.opts.accent_color or "#050708"
+          local alpha = faded_alpha(action.selected and "30" or "48")
+          draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+            bounds.h / 2, color, alpha, ignore_fade)
+          local label = tostring(action.label or "")
+          local icon_x = label == "" and (bounds.x + bounds.w / 2) or
+            (bounds.x + dp(19))
+          draw_icon(ass, icon_x, bounds.y + bounds.h / 2,
+            action.icon or "skip_next", "#FFFFFF", 22,
+            faded_alpha(action.enabled == false and "90" or "00"),
+            ignore_fade)
+          if label ~= "" then
+            draw_text(ass, bounds.x + dp(36), bounds.y + bounds.h / 2,
+              label, 19, "#FFFFFF",
+              faded_alpha(action.enabled == false and "90" or "00"),
+              default_text_font, 4, nil, ignore_fade)
+          end
+          -- Paint the hover state with the chip itself so the seek preview,
+          -- which is composed afterward, remains above the entire action.
+          if action.enabled ~= false and mouse_in(bounds) then
+            draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+              bounds.h / 2, "#FFFFFF", faded_alpha("D8"), ignore_fade)
+          end
+        end
+        if not self.suppressed and opacity > 0.5 and action.tooltip and
+          action.enabled ~= false and mouse_in(bounds) then
+          ui.request_tooltip(action.tooltip, bounds, self.persistent)
+        end
+      end
+
+      return chip
+    end
+
+    for index = 1, 8 do node.chips[index] = ActionChip(index) end
+
+    function node:update(suppressed)
+      -- These actions remain visible after the controller hides. Keep them
+      -- independent of controller opacity during the fade as well, otherwise
+      -- they disappear with the title row and pop back in as an overlay.
+      self.persistent = true
+      self.suppressed = suppressed == true
+      local presence = state.sponsorblock.actions_opacity
+      local desired_actions = services.sponsorblock and
+        services.sponsorblock:prompt_actions() or {}
+      local desired_signature = actions_signature(desired_actions)
+      local now = ui.now()
+
+      if desired_signature == self.action_signature then
+        self.actions = desired_actions
+        presence:set_target(
+          #desired_actions > 0 and 1 or 0, now,
+          #desired_actions > 0 and 0.16 or 0.12)
+      elseif #self.actions == 0 or presence.value <= 0.001 then
+        self.actions = desired_actions
+        self.action_signature = desired_signature
+        presence:set_target(
+          #desired_actions > 0 and 1 or 0, now,
+          #desired_actions > 0 and 0.16 or 0.12)
+      else
+        -- Fade the current group out before replacing it with a structurally
+        -- different set, such as Skip/Dismiss becoming Vote/Undo.
+        presence:set_target(0, now, 0.12)
+      end
+
+      self.opacity = clamp(
+        state.playlist.controls_opacity.value * presence.value, 0, 1)
+      local actions_suppressed = self.suppressed or
+        desired_signature ~= self.action_signature
+      for index, chip in ipairs(self.chips) do
+        chip:update(
+          self.actions[index], self.persistent,
+          actions_suppressed, self.opacity)
+      end
+    end
+
+    function node:measure(parent)
+      if #self.actions == 0 then return {w = 0, h = 0} end
+      local total = 0
+      for index = 1, math.min(#self.actions, #self.chips) do
+        total = total + self.chips[index]:measure(parent).w +
+          (index > 1 and dp(6) or 0)
+      end
+      return apply_modifier_size(
+        self.modifier, {w = total, h = dp(36)}, parent)
+    end
+
+    function node:draw(ass, bounds)
+      self.bounds = bounds
+      local gap = dp(6)
+      local widths, total = {}, 0
+      for index = 1, math.min(#self.actions, #self.chips) do
+        widths[index] = self.chips[index]:measure(bounds).w
+        total = total + widths[index] + (index > 1 and gap or 0)
+      end
+      local x = bounds.x
+      for index = 1, #widths do
+        local chip_bounds = Rect({
+          x = x, y = bounds.y, w = widths[index], h = bounds.h
+        })
+        draw_node(self.chips[index], ass, chip_bounds)
+        x = x + widths[index] + gap
+      end
+    end
+
+    return node
+  end
+
+  local function SponsorBlockControls()
+    local node = {
+      actions = {},
+      buttons = {},
+      modifier = Modifier():drawBehindInteraction(false)
+    }
+
+    local function ActionButton(index)
+      local button = {
+        action = nil,
+        modifier = Modifier():drawBehindInteraction(false)
+      }
+      button.icon = IconButton({
+        icon = "flag",
+        size = 30,
+        icon_size = 30,
+        modifier = Modifier():padding({
+          horizontal = dp(6),
+          vertical = dp(2)
+        })
+      })
+      button.label = TextItem({
+        text = "",
+        size = 20,
+        modifier = Modifier():padding({ending = dp(8)})
+      })
+      button.label_visibility = Visibility({
+        visible = false,
+        child = button.label
+      })
+      button.pill = Pill({
+        gap = 0,
+        horizontal_padding = 4,
+        children = {button.icon, button.label_visibility},
+        modifier = Modifier():clickable({
+          name = "sponsorblock-tool-" .. tostring(index),
+          enabled = false,
+          on_click = function()
+            local action = button.action
+            if action and action.enabled ~= false and action.on_click then
+              action.on_click()
+            end
+          end
+        }):hoverIndication({inset = dp(4)})
+      })
+      button.pill.modifier:drawBehindInteraction(true)
+
+      function button:update(action)
+        self.action = action
+        local enabled = action ~= nil and action.enabled ~= false
+        self.pill.modifier.pointer_enabled = enabled
+        local hitbox =
+          state.input.hitboxes[self.pill.modifier.pointer_name]
+        if hitbox then hitbox.enabled = enabled end
+        if not action then return end
+        local label = tostring(action.label or "")
+        self.icon:update({
+          icon = action.icon or "flag",
+          enabled = enabled,
+          alpha = enabled and "00" or "90"
+        })
+        self.label:update({
+          text = label,
+          alpha = enabled and "00" or "90"
+        })
+        self.label_visibility:set_visible(label ~= "")
+        self.pill.tooltip = action.tooltip
+        self.pill.modifier.background_color =
+          action.selected and config.opts.accent_color or "#050708"
+        self.pill.modifier.background_alpha =
+          action.selected and "30" or "58"
+      end
+
+      function button:measure(parent)
+        if not self.action then return {w = 0, h = 0} end
+        return measure_node(self.pill, parent)
+      end
+
+      function button:draw(ass, bounds)
+        if self.action then draw_node(self.pill, ass, bounds) end
+      end
+
+      return button
+    end
+
+    for index = 1, 6 do
+      node.buttons[index] = ActionButton(index)
+    end
+    node.row = Row({gap = dp(8), children = node.buttons})
+
+    function node:update()
+      self.actions = services.sponsorblock and
+        services.sponsorblock:tool_actions() or {}
+      for index, button in ipairs(self.buttons) do
+        button:update(self.actions[index])
+      end
+    end
+
+    function node:measure(parent)
+      return apply_modifier_size(
+        self.modifier, measure_node(self.row, parent), parent)
+    end
+
+    function node:draw(ass, bounds)
+      self.row:draw(ass, content_bounds(bounds, self.modifier))
+    end
+
+    return node
+  end
+
   local function VideoSurface()
     local node = {modifier = Modifier():fillMaxWidth():fillMaxHeight()}
     node.modifier:pointerArea({
@@ -534,10 +825,20 @@ function controls.new(services)
         node.subtitles_visibility, node.screenshot_visibility,
         node.pip_visibility, node.settings, node.fullscreen
       },
-      modifier = Modifier():align({horizontal = "ending", vertical = "center"})
+      modifier = Modifier()
+    })
+    node.sponsorblock = SponsorBlockControls()
+    node.ending_actions = Row({
+      gap = dp(8),
+      children = {node.sponsorblock, node.ending},
+      modifier = Modifier():align({
+        horizontal = "ending",
+        vertical = "center"
+      })
     })
 
     function node:update(snapshot, static_changed)
+      self.sponsorblock:update()
       self.screenshot_visibility:set_visible(config.opts.screenshot_button)
       self.pip_visibility:set_visible(config.opts.pip_button)
       if static_changed then
@@ -587,7 +888,7 @@ function controls.new(services)
 
     function node:measure(parent)
       local starting_size = measure_node(self.starting, parent)
-      local ending_size = measure_node(self.ending, parent)
+      local ending_size = measure_node(self.ending_actions, parent)
       return apply_modifier_size(self.modifier, {
         w = math.max(starting_size.w, ending_size.w),
         h = math.max(starting_size.h, ending_size.h)
@@ -596,7 +897,7 @@ function controls.new(services)
 
     function node:draw(ass, bounds)
       draw_node(self.starting, ass, bounds)
-      draw_node(self.ending, ass, bounds)
+      draw_node(self.ending_actions, ass, bounds)
     end
 
     function node:draw_dynamic(ass)
@@ -765,6 +1066,8 @@ function controls.new(services)
     VolumeSlider = VolumeSlider,
     VolumeControl = VolumeControl,
     SeekBar = SeekBar,
+    YouTubeActions = YouTubeActions,
+    SponsorBlockControls = SponsorBlockControls,
     VideoSurface = VideoSurface,
     ControlsRow = ControlsRow,
     PipControl = PipControl,

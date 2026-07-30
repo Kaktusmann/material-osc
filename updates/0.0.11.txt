@@ -1,0 +1,9 @@
+- Added built-in SponsorBlock support for YouTube, with configurable automatic skipping, skip prompts, ignored categories, multicolored seekbar markers, and category labels in seek previews.
+- SponsorBlock actions are integrated into the playback controls, including Skip, Dismiss, Undo, voting, segment marking, category selection, and submission. Active skip prompts remain accessible after the main controls fade.
+- Added configurable intro and outro chapter detection for local media, with options to skip automatically, ask each time, or leave matching chapters untouched.
+- Added Picture-in-Picture mode with a compact always-on-top window and an Exit PiP control. Leaving PiP restores the previous window size, fullscreen or maximized state, and always-on-top preference.
+- Added `screenshot_button` and `pip_button` options for choosing which playback actions appear in the control bar.
+- The welcome screen's scrolling phrases are now interactive collectibles that are saved between sessions, and clicking the material-osc logo triggers a new morphing animation.
+- Added material-osc notification pills for bookmark, clipboard, shader, subtitle, updater, SponsorBlock, and other action feedback, replacing overlapping mpv OSD messages.
+- Improved controller visibility around the seekbar, SponsorBlock prompts, and Picture-in-Picture controls so active interactions do not disappear under the pointer.
+- Refined loading and brand animations, viewport-resize rendering, seek-preview spacing, and configuration documentation.

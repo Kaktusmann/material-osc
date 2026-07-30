@@ -92,6 +92,12 @@ function application_state.new(args)
       caption_loading_id = nil, caption_request_id = 0,
       pending_subtitles = nil
     },
+    sponsorblock = {
+      active = false, loading = false, video_id = nil, user_id = nil,
+      segments = {}, prompt = nil, feedback = nil, last_segment = nil,
+      draft = nil, submitting = false,
+      skipped_chapters = {}, dismissed_chapters = {}
+    },
     tooltip = {hover_key = nil, hover_start = 0, requested = false, visual = nil},
     thumbnail = {
       width = 0, height = 0, disabled = true, available = false,
@@ -191,6 +197,9 @@ function application_state.new(args)
   })
   runtime.playback_indicator.opacity = animation.tween({initial = 0, duration = 0.18})
   runtime.playback_indicator.scale = animation.spring({initial = 1, stiffness = 520, damping = 32})
+  runtime.sponsorblock.actions_opacity = animation.tween({
+    initial = 0, duration = 0.16
+  })
   for _, side in ipairs({"left", "right"}) do
     runtime.edge_seek[side].opacity = animation.tween({initial = 0, duration = 0.15})
     runtime.edge_seek[side].slide = animation.spring({

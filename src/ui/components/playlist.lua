@@ -1,6 +1,6 @@
 local playlist = {}
 
-function playlist.new(services)
+function playlist.new(services, trailing)
   local state, ui = services.state, services.ui
   local playlist_state, pointer = state.playlist, state.pointer
   local dp, clamp = ui.dp, ui.clamp
@@ -414,6 +414,7 @@ function playlist.new(services)
     local node = {
       snapshot = {}, morph = 0, content_opacity = 0, interactive = false,
       panel_width = dp(380), panel_height = dp(460),
+      trailing = trailing,
       modifier = Modifier():fillMaxWidth():height(dp(44))
     }
     node.backdrop = Backdrop()
@@ -522,6 +523,14 @@ function playlist.new(services)
 
     function node:draw(ass, bounds)
       local _, _, source = control_metrics(bounds)
+      local trailing_size = self.trailing and
+        measure_node(self.trailing, bounds) or {w = 0, h = 0}
+      local trailing_bounds = Rect({
+        x = bounds.x2 - trailing_size.w,
+        y = bounds.y + (bounds.h - trailing_size.h) / 2,
+        w = trailing_size.w,
+        h = trailing_size.h
+      })
       local morphing = playlist_state.animation:is_running() or
         playlist_state.width_animation:is_running() or
         playlist_state.height_animation:is_running()
@@ -529,6 +538,9 @@ function playlist.new(services)
         if self.morph == 0 and not playlist_state.open and
           not morphing then
           draw_control_buttons(ass, source, source, 0)
+        end
+        if trailing_size.w > 0 then
+          draw_node(self.trailing, ass, trailing_bounds)
         end
         return
       end
@@ -543,11 +555,16 @@ function playlist.new(services)
       end
       local title = self.snapshot.media_title or ""
       local title_x = bounds.x + source.w + dp(12)
-      local available = math.max(0, bounds.x2 - title_x - dp(8))
+      local trailing_gap = trailing_size.w > 0 and dp(12) or dp(8)
+      local available = math.max(0,
+        trailing_bounds.x - title_x - trailing_gap)
       title = truncate_to_width(title, available, 24)
       ui.draw_shadowed_text(ass, title_x, bounds.y + bounds.h / 2,
         title, 24, "#FFFFFF", alpha(self.controls_opacity),
         default_text_font, 4)
+      if trailing_size.w > 0 then
+        draw_node(self.trailing, ass, trailing_bounds)
+      end
     end
 
     function node:draw_expanded(ass, bounds)

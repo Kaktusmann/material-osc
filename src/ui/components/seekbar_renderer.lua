@@ -8,6 +8,8 @@ function seekbar_renderer.new(deps)
   local seek_pos_from_mouse = deps.seek_pos_from_mouse
   local draw_thumbnail_preview = deps.draw_thumbnail_preview
   local enqueue_effect, thumbnail_service = deps.enqueue_effect, deps.thumbnail_service
+  local sponsorblock_category_style = deps.sponsorblock_category_style
+  local sponsorblock_should_render = deps.sponsorblock_should_render
 
   local function draw_seekbar(ass, x1, y, x2)
     runtime.seek.preview_bounds = nil
@@ -95,6 +97,26 @@ function seekbar_renderer.new(deps)
     end
   
     draw_boxes(ass, track_segments(x1, handle_x), opts.accent_color, "00")
+
+    local sponsorblock = runtime.sponsorblock or {}
+    for _, segment in ipairs(sponsorblock.segments or {}) do
+      local start_time = tonumber(segment.start_time)
+      local end_time = tonumber(segment.end_time)
+      local should_render = not sponsorblock_should_render or
+        sponsorblock_should_render(segment.category)
+      if should_render and start_time and end_time and
+        end_time > start_time then
+        local segment_x1 =
+          x1 + seek_w * clamp(start_time / duration, 0, 1)
+        local segment_x2 =
+          x1 + seek_w * clamp(end_time / duration, 0, 1)
+        local style = sponsorblock_category_style(segment.category)
+        local segment_color = opts.sponsorblock_multicolored_segments and
+          style.color or "#ffff00"
+        draw_boxes(ass, track_segments(segment_x1, segment_x2),
+          segment_color, style.alpha)
+      end
+    end
 
     local loop_a = tonumber(runtime.snapshot.ab_loop_a)
     local loop_b = tonumber(runtime.snapshot.ab_loop_b)

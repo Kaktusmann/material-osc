@@ -24,6 +24,7 @@ function animation_coordinator.new(args)
     runtime.settings.height_animation,
     runtime.playback_indicator.opacity,
     runtime.playback_indicator.scale,
+    runtime.sponsorblock.actions_opacity,
     runtime.edge_seek.left.opacity,
     runtime.edge_seek.left.slide,
     runtime.edge_seek.left.feedback,
@@ -217,6 +218,7 @@ function animation_coordinator.new(args)
     runtime.settings.height_animation:update(now)
     runtime.playback_indicator.opacity:update(now)
     runtime.playback_indicator.scale:update(now)
+    runtime.sponsorblock.actions_opacity:update(now)
 
     local wants_left, wants_right = self:edge_targets()
     for _, item in ipairs({

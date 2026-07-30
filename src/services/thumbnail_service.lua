@@ -10,6 +10,7 @@ function thumbnail.new(deps)
   local clamp = deps.clamp
   local format_time = deps.format_time
   local chapter_name_at = deps.chapter_name_at
+  local sponsorblock_preview_at = deps.sponsorblock_preview_at
   local enqueue_effect = deps.enqueue_effect
   local render = deps.render
   local draw_box = deps.draw_box
@@ -66,6 +67,11 @@ function thumbnail.new(deps)
     local has_thumbnail = thumbnail_service:is_ready()
     local time_text = format_time(pos)
     local chapter_text = chapter_name_at(pos)
+    local category = sponsorblock_preview_at and
+      sponsorblock_preview_at(pos) or nil
+    local category_text = category and category.text or nil
+    local category_color = category and category.color or nil
+    local category_text_color = category and category.text_color or "#FFFFFF"
     local pill_text_size = 22
     local pill_vertical_padding = dp(4)
     local pill_horizontal_padding = dp(12)
@@ -82,9 +88,18 @@ function thumbnail.new(deps)
                 pill_horizontal_padding * 2
 
     local max_row_w = math.max(0, viewport.w - margin * 2)
+    local category_pill_w = 0
+    if category_text then
+      category_pill_w = text_intrinsic_width(category_text, pill_text_size) +
+        pill_horizontal_padding * 2
+    end
+    local fixed_row_w = time_pill_w
+    if category_text then
+      fixed_row_w = fixed_row_w + pill_gap + category_pill_w
+    end
     local chapter_pill_w = 0
     if chapter_text then
-      local available_chapter_w = max_row_w - time_pill_w - pill_gap
+      local available_chapter_w = max_row_w - fixed_row_w - pill_gap
       if available_chapter_w >= dp(64) then
         local max_chapter_w = math.min(dp(300), available_chapter_w)
         chapter_text = truncate_utf8_to_width(chapter_text,
@@ -98,7 +113,7 @@ function thumbnail.new(deps)
       end
     end
 
-    local row_w = time_pill_w
+    local row_w = fixed_row_w
     if chapter_text then row_w = row_w + pill_gap + chapter_pill_w end
 
     local thumb_x1, thumb_y1, thumb_x2, thumb_y2 = 0, 0, 0, 0
@@ -121,6 +136,9 @@ function thumbnail.new(deps)
     local time_x2 = time_x1 + time_pill_w
     local chapter_x1 = time_x2 + pill_gap
     local chapter_x2 = chapter_x1 + chapter_pill_w
+    local category_x1 = chapter_text and (chapter_x2 + pill_gap) or
+      (time_x2 + pill_gap)
+    local category_x2 = category_x1 + category_pill_w
 
     if has_thumbnail then
       draw_box(ass, thumb_x1 - frame_pad, thumb_y1 - frame_pad,
@@ -145,6 +163,14 @@ function thumbnail.new(deps)
       draw_text(ass, (chapter_x1 + chapter_x2) / 2,
             (pill_y1 + pill_y2) / 2, chapter_text, pill_text_size,
             "#FFFFFF")
+    end
+
+    if category_text then
+      draw_box(ass, category_x1, pill_y1, category_x2, pill_y2, pill_h / 2,
+        category_color, "00")
+      draw_text(ass, (category_x1 + category_x2) / 2,
+        (pill_y1 + pill_y2) / 2, category_text, pill_text_size,
+        category_text_color)
     end
   end
 
