@@ -42,7 +42,10 @@ function application_state.new(args)
       keyboard_focus = nil, keyboard_scope = nil,
       drawing_keyboard_focus = false, keyboard_generation = 0
     },
-    time = {show_remaining = false},
+    time = {
+      show_remaining = opts.show_remaining_time,
+      adjust_with_speed = opts.adjust_time_with_speed
+    },
     temporary_speed = {active = false, previous = nil},
     seek = {
       dragging = false, position = nil, offset_x = 0,

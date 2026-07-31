@@ -1,6 +1,15 @@
 local popups = {}
 local popup_factories = require "src.ui.components.popup_factories"
 
+local function normalize_aspect_override(value)
+  value = tostring(value or "no"):lower():match("^%s*(.-)%s*$")
+  if value == "" or value == "no" then return "no" end
+  local numeric = tonumber(value)
+  return numeric and numeric <= 0 and "no" or value
+end
+
+popups.normalize_aspect_override = normalize_aspect_override
+
 function popups.new(services)
   local state, ui = services.state, services.ui
   local player, navigation = services.player, services.navigation
@@ -821,6 +830,7 @@ end
   end
 
   local function apply_crop_preset(item)
+    mp.set_property("video-aspect-override", "no")
     if item.mode == "stretch" then
       mp.set_property("video-crop", "")
       mp.set_property_native("keepaspect", false)
@@ -863,13 +873,14 @@ end
     mp.set_property("video-crop", string.format("%dx%d", crop_width, crop_height))
   end
 
-  local function CropPill(name, item)
+  local function CropPill(name, item, on_click)
+    on_click = on_click or apply_crop_preset
     local node = {
       item = item, selected = false, interactive = false,
       text_alpha = "00", hover_alpha = "00", selected_alpha = "00",
       modifier = Modifier():height(dp(42)):clickable({
         name = name, enabled = false,
-        on_click = function() apply_crop_preset(item) end
+        on_click = function() on_click(item) end
       })
     }
     function node:update(props)
@@ -912,7 +923,12 @@ end
         name = "video-crop-panel", enabled = false, on_click = function() end
       })
     }
-    node.header = ChapterHeader(on_back, "Crop", "arrow_back")
+    node.header = ChapterHeader(on_back, "Crop", "arrow_back", {
+      name = "video-crop-aspect-override",
+      icon = "aspect_ratio",
+      tooltip = "Aspect Override",
+      on_click = function() set_settings_page("video_aspect") end
+    })
     node.mode_pills, node.ratio_pills = {}, {}
     for index, preset in ipairs(crop_presets) do
       if preset.mode then
@@ -969,6 +985,97 @@ end
     return node
   end
 
+  local aspect_presets = {
+    {label = "Original", value = "no"},
+    {label = "16:9", value = "16:9", ratio = 16 / 9},
+    {label = "21:9", value = "21:9", ratio = 21 / 9},
+    {label = "4:3", value = "4:3", ratio = 4 / 3},
+    {label = "1:1", value = "1:1", ratio = 1},
+    {label = "9:16", value = "9:16", ratio = 9 / 16}
+  }
+
+  local function aspect_preset_value(value)
+    value = normalize_aspect_override(value)
+    if value == "no" then return "no" end
+    local left, right = value:match("^([%d%.]+):([%d%.]+)$")
+    local ratio = left and tonumber(left) / tonumber(right) or tonumber(value)
+    if not ratio then return value end
+    for _, preset in ipairs(aspect_presets) do
+      if preset.ratio and math.abs(ratio - preset.ratio) < 0.015 then
+        return preset.value
+      end
+    end
+    return value
+  end
+
+  local function aspect_label(value)
+    local selected = aspect_preset_value(value)
+    for _, preset in ipairs(aspect_presets) do
+      if preset.value == selected then return preset.label end
+    end
+    return selected == "no" and "Original" or selected
+  end
+
+  local function apply_aspect_preset(item)
+    if item.value ~= "no" then
+      mp.set_property("video-crop", "")
+      mp.set_property_native("keepaspect", true)
+      mp.set_property_number("panscan", 0)
+    end
+    mp.set_property("video-aspect-override", item.value)
+  end
+
+  local function VideoAspectPopup(on_back)
+    local node = {
+      width = dp(400), height = dp(164), selected = "no", interactive = false,
+      panel_alpha = "00", text_alpha = "00", hover_alpha = "00",
+      selected_alpha = "00", modifier = Modifier():clickable({
+        name = "video-aspect-panel", enabled = false, on_click = function() end
+      })
+    }
+    node.header = ChapterHeader(on_back, "Aspect Override", "arrow_back")
+    node.pills = {}
+    for index, preset in ipairs(aspect_presets) do
+      node.pills[index] = CropPill(
+        "video-aspect-preset-" .. tostring(index), preset,
+        apply_aspect_preset)
+    end
+    function node:update(props)
+      update_fields(self, props)
+      self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
+      self.modifier.pointer_enabled = self.interactive
+      self.header:update({alpha = self.text_alpha, hover_alpha = self.hover_alpha,
+        interactive = self.interactive})
+      local common = {interactive = self.interactive, text_alpha = self.text_alpha,
+        hover_alpha = self.hover_alpha, selected_alpha = self.selected_alpha}
+      for _, pill in ipairs(self.pills) do
+        common.selected = pill.item.value == self.selected
+        pill:update(common)
+      end
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
+    end
+    function node:draw(ass, bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+        dp(30), "#050708", self.panel_alpha)
+      draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y,
+        w = bounds.w, h = dp(56)}))
+      local inset, gap = dp(8), dp(8)
+      local pill_width = (bounds.w - inset * 2 - gap * 2) / 3
+      for index, pill in ipairs(self.pills) do
+        local column = (index - 1) % 3
+        local row = math.floor((index - 1) / 3)
+        draw_node(pill, ass, Rect({
+          x = bounds.x + inset + column * (pill_width + gap),
+          y = bounds.y + dp(64) + row * dp(50),
+          w = pill_width, h = dp(42)
+        }))
+      end
+    end
+    return node
+  end
+
   local function VideoSettingsPopup(on_back)
     local node = {
       width = dp(380), height = dp(332), interactive = false,
@@ -982,6 +1089,7 @@ end
     }
     local function reset_video_settings()
       mp.set_property("video-crop", "")
+      mp.set_property("video-aspect-override", "no")
       mp.set_property_native("keepaspect", true)
       mp.set_property_number("panscan", 0)
       mp.set_property_number("gamma", 0)
@@ -1184,6 +1292,9 @@ end
       set_settings_page("video")
     end)
     node.video_crop = VideoCropPopup(function() set_settings_page("root") end)
+    node.video_aspect = VideoAspectPopup(function()
+      set_settings_page("video_crop")
+    end)
     node.video_shaders = TrackPopup(function()
       set_settings_page("video_settings")
     end, {
@@ -1215,6 +1326,8 @@ end
       else
         self.video_crop_selected = crop_preset_value(self.video_crop_value)
       end
+      self.video_aspect_selected =
+        aspect_preset_value(self.video_aspect_override)
       self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
       self.modifier.pointer_enabled = self.interactive
       local common = {interactive = self.interactive, text_alpha = self.text_alpha,
@@ -1236,7 +1349,9 @@ end
         tostring(self.subtitle_track_count or math.max(0, #self.subtitle_items - 1)) .. ")",
         selected_track_label(self.subtitle_items, self.subtitle_id, "Off")
       self.subtitle_row:update(common)
-      common.label, common.value = "Crop",
+      common.label = "Crop"
+      common.value = self.video_aspect_selected ~= "no" and
+        ("Aspect " .. aspect_label(self.video_aspect_override)) or
         crop_label(self.video_crop_value, self.video_keepaspect,
           self.video_panscan)
       self.crop_row:update(common)
@@ -1296,6 +1411,9 @@ end
       elseif settings_state.page == "video_crop" then
         page_props.selected = self.video_crop_selected
         self.video_crop:update(page_props)
+      elseif settings_state.page == "video_aspect" then
+        page_props.selected = self.video_aspect_selected
+        self.video_aspect:update(page_props)
       elseif settings_state.page == "video_shaders" then
         page_props.items = self.shader_items
         self.video_shaders:update(page_props)
@@ -1324,6 +1442,9 @@ end
       end
       if settings_state.page == "video_crop" then
         page = self.video_crop
+      end
+      if settings_state.page == "video_aspect" then
+        page = self.video_aspect
       end
       if settings_state.page == "video_shaders" then
         page = self.video_shaders
@@ -1446,7 +1567,8 @@ end
           settings_state.page == "auto_captions" or
           settings_state.page == "video_shaders"
         local desired_w = wide_page and dp(420) or
-          (settings_state.page == "video_crop" and dp(400) or
+          ((settings_state.page == "video_crop" or
+              settings_state.page == "video_aspect") and dp(400) or
             (settings_state.page == "video_settings" and dp(380) or dp(320)))
         local target_w = math.max(dp(300), math.min(desired_w, viewport.w - dp(24)))
         local item_count = 0
@@ -1467,7 +1589,8 @@ end
         elseif settings_state.page == "speed" then desired_h = dp(190)
         elseif settings_state.page == "subtitle_style" then desired_h = dp(288)
         elseif settings_state.page == "video_settings" then desired_h = dp(332)
-        elseif settings_state.page == "video_crop" then desired_h = dp(164)
+        elseif settings_state.page == "video_crop" or
+          settings_state.page == "video_aspect" then desired_h = dp(164)
         elseif settings_state.page == "video_shaders" and item_count == 0 then
           desired_h = dp(116)
         else
@@ -1537,6 +1660,7 @@ end
         props.subtitle_color = snapshot.subtitle_color or "#FFFFFFFF"
         props.subtitle_font = snapshot.subtitle_font or "sans-serif"
         props.video_crop_value = snapshot.video_crop or ""
+        props.video_aspect_override = snapshot.video_aspect_override or "no"
         props.video_keepaspect = snapshot.video_keepaspect ~= false
         props.video_panscan = snapshot.video_panscan or 0
         props.video_gamma = snapshot.video_gamma or 0

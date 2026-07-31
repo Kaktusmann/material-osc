@@ -1,5 +1,12 @@
 local snapshot = {}
 
+function snapshot.adjust_time(seconds, speed, adjust_with_speed)
+  local adjusted = math.max(0, tonumber(seconds) or 0)
+  speed = tonumber(speed) or 1
+  if adjust_with_speed and speed > 0 then adjusted = adjusted / speed end
+  return adjusted
+end
+
 function snapshot.reader(deps)
   local runtime = deps.runtime
   local format_time = deps.format_time
@@ -38,14 +45,19 @@ function snapshot.reader(deps)
   return function()
     local duration = property_number("duration", 0) or 0
     local position = property_number("time-pos", 0) or 0
+    local speed = property_number("speed", 1) or 1
     local chapters = property_native("chapter-list", {}) or {}
     local chapter_index = property_number("chapter", -1) or -1
     local displayed_time
     if runtime.time.show_remaining and duration > 0 then
-      displayed_time = "-" .. format_time(math.max(0, duration - position))
+      displayed_time = "-" .. format_time(snapshot.adjust_time(
+        duration - position, speed, runtime.time.adjust_with_speed))
     else
-      displayed_time = format_time(position)
+      displayed_time = format_time(snapshot.adjust_time(
+        position, speed, runtime.time.adjust_with_speed))
     end
+    local displayed_duration = snapshot.adjust_time(
+      duration, speed, runtime.time.adjust_with_speed)
 
     local chapter_name = nil
     local chapter = chapters[chapter_index + 1]
@@ -249,7 +261,7 @@ function snapshot.reader(deps)
       title_bar = property_native("title-bar") ~= false,
       window_maximized = property_native("window-maximized") == true,
       volume = property_number("volume", 0) or 0,
-      speed = property_number("speed", 1) or 1,
+      speed = speed,
       sub_visibility = property_native("sub-visibility") ~= false,
       subtitle_text = property("sub-text", "") or "",
       secondary_sub_visibility =
@@ -260,6 +272,7 @@ function snapshot.reader(deps)
       subtitle_color = property("sub-color", "#FFFFFFFF") or "#FFFFFFFF",
       subtitle_font = property("sub-font", "sans-serif") or "sans-serif",
       video_crop = property("video-crop", "") or "",
+      video_aspect_override = property("video-aspect-override", "no") or "no",
       video_keepaspect = property_native("keepaspect") ~= false,
       video_panscan = property_number("panscan", 0) or 0,
       video_gamma = property_number("gamma", 0) or 0,
@@ -279,7 +292,7 @@ function snapshot.reader(deps)
       audio_items = audio_items,
       audio_id = audio_id,
       chapter_name = chapter_name,
-      time_text = displayed_time .. " / " .. format_time(duration),
+      time_text = displayed_time .. " / " .. format_time(displayed_duration),
       buffering = is_buffering(),
       network = property_native("demuxer-via-network") == true,
       cache_state = property_native("demuxer-cache-state", {}) or {},
@@ -316,12 +329,17 @@ function snapshot.cached_reader(deps)
     local playback_position = value.position or 0
     local displayed_time
     if deps.runtime.time.show_remaining and duration > 0 then
-      displayed_time = "-" ..
-        deps.format_time(math.max(0, duration - playback_position))
+      displayed_time = "-" .. deps.format_time(snapshot.adjust_time(
+        duration - playback_position, value.speed,
+        deps.runtime.time.adjust_with_speed))
     else
-      displayed_time = deps.format_time(playback_position)
+      displayed_time = deps.format_time(snapshot.adjust_time(
+        playback_position, value.speed, deps.runtime.time.adjust_with_speed))
     end
-    value.time_text = displayed_time .. " / " .. deps.format_time(duration)
+    local displayed_duration = snapshot.adjust_time(
+      duration, value.speed, deps.runtime.time.adjust_with_speed)
+    value.time_text = displayed_time .. " / " ..
+      deps.format_time(displayed_duration)
   end
 
   function service:invalidate()

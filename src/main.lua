@@ -66,6 +66,7 @@ local tooltip_service_module = require "src.ui.tooltip_service"
 local snapshot_module = require "src.services.snapshot"
 local assets = require "src.services.assets"
 local player_module = require "src.services.player"
+local media_title_module = require "src.services.media_title"
 local directory_playlist_module = require "src.services.directory_playlist"
 local stream_quality_module = require "src.services.stream_quality"
 local sponsorblock_module = require "src.services.sponsorblock"
@@ -97,6 +98,11 @@ local http = http_module.new({process = process, runtime = platform_runtime})
 local dialogs = dialogs_module.new({process = process, runtime = platform_runtime})
 local persistence = persistence_module.new({filesystem = filesystem, utils = utils})
 local timers = timers_module.new({mp = mp})
+local media_title = media_title_module.new({
+  mp = mp, process = process, utils = utils,
+  runtime = platform_runtime, msg = msg
+})
+media_title:register()
 
 local manual_stream_quality_reload = false
 -- Run before mpv's built-in ytdl hook, which uses priority 10.
@@ -141,6 +147,7 @@ local function create_app(services)
   local node = {
     no_video_since = nil,
     no_video_opacity = 0,
+    playlist_empty = true,
     snapshot_revision = nil
   }
   node.video = controls.VideoSurface()
@@ -201,7 +208,7 @@ local function create_app(services)
       state.settings.open or state.settings.animation.value > 0.001
     self.empty_state:update(self.empty_visible, self.empty_visible and not modal)
     self.tooltip:set_suppressed(
-      self.empty_visible or state.controller.opacity.value <= 0 or modal)
+      self.playlist_empty or state.controller.opacity.value <= 0 or modal)
     self.chapter:update(snapshot)
     self.settings:update(snapshot)
     if context_visible then self.context_menu:update(snapshot) end
@@ -210,8 +217,9 @@ local function create_app(services)
   end
 
   function node:update_video_presence(snapshot)
-    self.empty_visible = (snapshot.playlist_count or 0) == 0
-    if self.empty_visible or snapshot.video_present or state.media.loading then
+    self.playlist_empty = (snapshot.playlist_count or 0) == 0
+    self.empty_visible = self.playlist_empty and opts.show_empty_screen
+    if self.playlist_empty or snapshot.video_present or state.media.loading then
       self.no_video_since = nil
       self.no_video_opacity = 0
     else
@@ -262,7 +270,7 @@ local function create_app(services)
       settings_visible or context_visible
     self.empty_state:update(self.empty_visible, self.empty_visible and not modal)
     self.tooltip:set_suppressed(
-      self.empty_visible or state.controller.opacity.value <= 0 or modal)
+      self.playlist_empty or state.controller.opacity.value <= 0 or modal)
     if state.update.open then self.update_dialog:update(snapshot) end
   end
 
@@ -293,7 +301,7 @@ local function create_app(services)
   end
 
   function node:draw_base(ass, root)
-    if not self.empty_visible then
+    if not self.playlist_empty then
       ui.draw_node(self.video, ass, root)
     end
     ui.draw_node(self.empty_state, ass, root)
@@ -317,7 +325,7 @@ local function create_app(services)
         })
       end
       state.pip.bounds = state.controller.bounds
-    elseif self.empty_visible then
+    elseif self.playlist_empty then
       state.controller.bounds = nil
       state.volume.popup_bounds, state.volume.button_bounds = nil, nil
       state.edge_seek.left.bounds, state.edge_seek.right.bounds = nil, nil
@@ -360,8 +368,8 @@ local function create_app(services)
   end
 
   function node:draw_dynamic(ass, root)
-    if self.empty_visible then
-      ui.draw_node(self.empty_state, ass, root)
+    if self.playlist_empty then
+      if self.empty_visible then ui.draw_node(self.empty_state, ass, root) end
       return
     end
     if opts.show_mini_seekbar then
@@ -408,10 +416,10 @@ local function create_app(services)
       state.pointer.x, state.pointer.y = -1, -1
     end
     if not state.pip.active and state.controller.opacity.value > 0 then
-      if not self.empty_visible then
+      if not self.playlist_empty then
         ui.draw_node(self.controller, ass, root)
       end
-    elseif not state.pip.active and not self.empty_visible then
+    elseif not state.pip.active and not self.playlist_empty then
       local bounds = self:persistent_action_bounds(root)
       if bounds then ui.draw_node(self.youtube_actions, ass, bounds) end
     end
@@ -419,18 +427,18 @@ local function create_app(services)
       ui.draw_node(self.window_controls, ass, root)
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
-    if not self.empty_visible and volume_owns_pointer and not modal_open then
+    if not self.playlist_empty and volume_owns_pointer and not modal_open then
       self.controls:draw_volume_interaction(ass)
     end
 
-    if not self.empty_visible and self.no_video_opacity > 0 then
+    if not self.playlist_empty and self.no_video_opacity > 0 then
       local icon_size = math.min(root.w, root.h) * 0.34 / ui.dp(1)
       services.ui.draw_icon(ass, root.x + root.w / 2, root.y + root.h / 2,
         "music_note_2", "#FFFFFF", icon_size,
         services.ui.alpha(self.no_video_opacity), true)
     end
     ui.draw_node(self.empty_state, ass, root)
-    if self.empty_visible then
+    if self.playlist_empty then
       if state.playback_indicator.show_on_empty then
         services.playback_indicator:draw(ass, root)
       end
@@ -460,7 +468,7 @@ local function create_app(services)
     if state.update.open then ui.draw_node(self.update_dialog, ass, root) end
     state.input.drawing_keyboard_focus = false
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
-    if not self.empty_visible then self.temporary_speed:draw(ass, root) end
+    if not self.playlist_empty then self.temporary_speed:draw(ass, root) end
     -- Tooltips must be composed after modal content so popup controls can
     -- request them and the resulting surface stays visually above the popup.
     ui.draw_node(self.tooltip, ass, root)
@@ -483,20 +491,20 @@ local function create_app(services)
     if state.sponsorblock.prompt or
       state.sponsorblock.actions_opacity.value > 0.001 or
       state.sponsorblock.actions_opacity:is_running() then return true end
-    if not self.empty_visible and opts.show_mini_seekbar and
+    if not self.playlist_empty and opts.show_mini_seekbar and
       (state.snapshot.duration or 0) > 0 and
       state.controller.opacity.value < 0.999 then
       return true
     end
     if state.snapshot.buffering or self.empty_visible or
       self.no_video_opacity > 0 or
-      (not self.empty_visible and (
+      (not self.playlist_empty and (
         state.controller.opacity.value > 0.001 or
         state.playback_indicator.opacity.value > 0.001 or
         state.edge_seek.left.opacity.value > 0.001 or
         state.edge_seek.right.opacity.value > 0.001)) or
       state.tooltip.opacity.value > 0.001 or state.update.open or
-      (not self.empty_visible and (
+      (not self.playlist_empty and (
         state.temporary_speed.active or self.media_information_close.visible)) then
       return true
     end
@@ -1190,6 +1198,18 @@ controller = controller_module.new({
 })
 
 options_update_handler = function(changed)
+  if changed.show_remaining_time then
+    runtime.time.show_remaining = opts.show_remaining_time
+  end
+  if changed.adjust_time_with_speed then
+    runtime.time.adjust_with_speed = opts.adjust_time_with_speed
+  end
+  if changed.show_remaining_time or changed.adjust_time_with_speed then
+    runtime.frame.progress_second = nil
+  end
+  if changed.show_empty_screen then
+    app:update_video_presence(runtime.snapshot)
+  end
   if changed.max_volume_percentage then
     max_volume_percentage = opts.max_volume_percentage
     services.config.max_volume_percentage = max_volume_percentage

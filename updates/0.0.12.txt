@@ -1,0 +1,6 @@
+- Added display-aspect overrides to the Crop settings, with presets for Original, 16:9, 21:9, 4:3, 1:1, and 9:16. Crop and aspect modes now clear conflicting video settings when selected.
+- Added `show_remaining_time` for choosing the default playback-clock mode and `adjust_time_with_speed` for adjusting elapsed, remaining, and total displayed time to the current playback speed.
+- Local movie and episode filenames are now cleaned automatically when the optional Python `guessit` package is installed, while preserving mpv's normal titles when it is unavailable.
+- Added `show_empty_screen` for hiding the welcome screen when the playlist is empty.
+- Improved Windows configuration and updater handling, including paths containing spaces and creation of temporary update directories.
+- Refactored filesystem, web-request, subprocess, dialog, timer, and persistence handling into shared cross-platform services, reducing duplicated service-specific behavior and improving error reporting.

@@ -30,6 +30,7 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
+| `show_empty_screen` | `yes` | `yes`, `no` | Shows the material-osc welcome screen when the playlist is empty. Set to `no` to leave the empty player unobstructed. |
 | `screenshot_button` | `yes` | `yes`, `no` | Shows or hides the screenshot button in the playback controls. |
 | `pip_button` | `yes` | `yes`, `no` | Shows or hides the Picture-in-Picture button in the playback controls. |
 | `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
@@ -56,6 +57,8 @@ the screen height. Its width is calculated from the video's aspect ratio.
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
 | `temporary_speed` | `2` | Playback rate greater than `0` | Sets the speed used while the `hold-double-speed` binding is held. |
+| `show_remaining_time` | `no` | `yes`, `no` | Shows remaining time instead of elapsed time by default. The time display remains clickable to toggle modes. |
+| `adjust_time_with_speed` | `yes` | `yes`, `no` | Adjusts elapsed, remaining, and total displayed time for the current playback speed. |
 | `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. |
 
 </details>
@@ -141,6 +144,13 @@ H script-binding material_osc/sponsorblock-downvote
 
 </details>
 
+### Video crop and aspect override
+
+Open **Settings → Crop** for display modes and centered crop presets. The
+aspect-ratio button in the Crop header opens fixed display-aspect overrides
+such as 16:9, 21:9, and 4:3. Aspect overrides stretch the complete frame
+without cropping; choosing a crop preset clears the override.
+
 ### Thumbnail previews
 
 Thumbnail previews require [Thumbfast](https://github.com/po5/thumbfast). Install
@@ -151,6 +161,14 @@ behavior, including support for network media, is configured through Thumbfast:
 # script-opts/thumbfast.conf
 network=yes
 ```
+
+### Optional media-title parsing
+
+If the Python [`guessit`](https://github.com/guessit-io/guessit) package is
+installed, material-osc automatically uses it to clean local movie and episode
+filenames. When `guessit` is unavailable, mpv's normal media title is used with
+no additional setup or error message. Explicit `force-media-title` values are
+always preserved.
 
 ## Building
 

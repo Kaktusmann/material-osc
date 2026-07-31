@@ -188,7 +188,8 @@ function mpv_runtime.new(args)
       {"loop-playlist", "string"}, {"loop-file", "string"},
       {"ab-loop-a", "number"}, {"ab-loop-b", "number"},
       {"shuffle", "bool"}, {"media-title", "string"},
-      {"video-crop", "string"}, {"keepaspect", "bool"},
+      {"video-crop", "string"}, {"video-aspect-override", "string"},
+      {"keepaspect", "bool"},
       {"panscan", "number"}, {"video-rotate", "number"},
       {"gamma", "number"}, {"brightness", "number"},
       {"contrast", "number"}, {"saturation", "number"},
@@ -223,8 +224,14 @@ function mpv_runtime.new(args)
     local function playback_visual_changed(value)
       local position = tonumber(value) or 0
       local duration = state.snapshot.duration or 0
-      local displayed_second = state.time.show_remaining and duration > 0 and
-        math.floor(math.max(0, duration - position)) or math.floor(position)
+      local displayed_position = state.time.show_remaining and duration > 0 and
+        math.max(0, duration - position) or position
+      if state.time.adjust_with_speed then
+        local speed = tonumber(state.properties.speed) or
+          tonumber(state.snapshot.speed) or 1
+        if speed > 0 then displayed_position = displayed_position / speed end
+      end
+      local displayed_second = math.floor(displayed_position)
       local progress_pixel = duration > 0 and
         math.floor(position / duration * math.max(1, state.viewport.w) + 0.5) or 0
       local frame = state.frame
