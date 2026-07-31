@@ -5,10 +5,6 @@ local REPOSITORY = "brahmkshatriya/material-osc"
 local API_URL = "https://api.github.com/repos/" .. REPOSITORY .. "/releases/latest"
 local CHECK_INTERVAL_SECONDS = 2 * 60 * 60
 
-local function is_windows()
-  return package.config:sub(1, 1) == "\\"
-end
-
 local function version_parts(value)
   local parts = {}
   value = tostring(value or ""):gsub("^[vV]", ""):match("^[^+-]+") or ""
@@ -26,91 +22,53 @@ local function is_newer(candidate, current)
   return false
 end
 
-local function read_file(path)
-  local file = io.open(path, "rb")
-  if not file then return nil end
-  local contents = file:read("*a")
-  file:close()
-  return contents
-end
-
-local function write_file(path, contents)
-  local file = io.open(path, "wb")
-  if not file then return false end
-  local ok = file:write(contents)
-  file:close()
-  return ok ~= nil
-end
-
 function update_service.new(args)
   local mp, utils, msg = args.mp, args.utils, args.msg
+  local filesystem, http = args.filesystem, args.http
   local state = args.state.update
   local service = {current_version = CURRENT_VERSION}
   local preferences_path = mp.command_native({
     "expand-path", "~~/script-opts/material-osc-updater.conf"
+  })
+  local preferences = args.persistence:key_value(preferences_path, {
+    default = function() return {mode = "ask", last_check = "0"} end,
+    order = {"mode", "last_check"}
   })
 
   local function render()
     if args.render then args.render() end
   end
 
-  local function subprocess(command, callback, capture_stdout)
-    mp.command_native_async({
-      name = "subprocess", args = command, playback_only = false,
-      capture_stdout = capture_stdout == true, capture_stderr = true
-    }, function(success, result)
-      local status = result and tonumber(result.status) or -1
-      callback(success and status == 0, result or {})
-    end)
-  end
-
   local function http_get(url, callback)
-    subprocess({"curl", "-fLsS", "--connect-timeout", "8", "--max-time", "15",
-      "-H", "Accept: application/vnd.github+json", url}, function(ok, result)
-      if ok or not is_windows() then callback(ok, result); return end
-      subprocess({"powershell", "-NoProfile", "-Command",
-        "(Invoke-WebRequest -UseBasicParsing -Headers @{Accept='application/vnd.github+json'} -Uri $args[0]).Content",
-        url}, callback, true)
-    end, true)
+    return http:get(url, {
+      fail = true,
+      connect_timeout = 8,
+      max_time = 15,
+      headers = {"Accept: application/vnd.github+json"}
+    }, callback)
   end
 
   local function download(url, path, callback)
-    subprocess({"curl", "-fL", "--connect-timeout", "10", "--max-time", "180",
-      "-o", path, url}, function(ok, result)
-      if ok or not is_windows() then callback(ok, result); return end
-      subprocess({"powershell", "-NoProfile", "-Command",
-        "Invoke-WebRequest -UseBasicParsing -Uri $args[0] -OutFile $args[1]",
-        url, path}, callback)
-    end)
-  end
-
-  local function ensure_directory(path)
-    local directory = utils.split_path(path)
-    if not directory or directory == "" or utils.file_info(directory) then return true end
-    local command = is_windows() and
-      {"powershell", "-NoProfile", "-Command",
-        "New-Item -ItemType Directory -Force -LiteralPath $args[0] | Out-Null", directory} or
-      {"mkdir", "-p", directory}
-    local result = mp.command_native({
-      name = "subprocess", args = command, playback_only = false
-    })
-    return result and tonumber(result.status) == 0
+    return http:download(url, path, {
+      connect_timeout = 10,
+      max_time = 180
+    }, callback)
   end
 
   local function read_preferences()
-    local contents = read_file(preferences_path) or ""
-    local mode = contents:match("mode%s*=%s*([%a_]+)")
+    local values = preferences:load()
+    local mode = values.mode
     if mode ~= "auto" and mode ~= "never" and mode ~= "ask" then mode = "ask" end
-    local last_check = tonumber(contents:match("last_check%s*=%s*(%d+)")) or 0
+    local last_check = tonumber(values.last_check) or 0
     return mode, last_check
   end
 
   local function save_preferences(mode, last_check)
     if mode ~= "auto" and mode ~= "never" and mode ~= "ask" then return false end
-    local contents = "mode=" .. mode .. "\nlast_check=" ..
-      tostring(math.max(0, math.floor(tonumber(last_check) or 0))) .. "\n"
-    if ensure_directory(preferences_path) and
-      write_file(preferences_path, contents) then
+    if preferences:save({
+      mode = mode,
+      last_check = tostring(math.max(0, math.floor(tonumber(last_check) or 0)))
+    }) then
       state.mode = mode
       state.last_check = tonumber(last_check) or 0
       return true
@@ -156,44 +114,25 @@ function update_service.new(args)
     local version = tostring(release.tag_name or ""):gsub("^[vV]", "")
     local url = "https://raw.githubusercontent.com/" .. REPOSITORY .. "/" ..
       tostring(release.tag_name) .. "/updates/" .. version .. ".txt"
-    http_get(url, function(ok, result)
-      callback(ok and result.stdout or release.body)
+    http_get(url, function(ok, response)
+      callback(ok and response.body or release.body)
     end)
   end
 
-  local function replace_file(source, target)
-    local contents = read_file(source)
-    if not contents then return false, "missing " .. source end
-    local temporary, backup = target .. ".update", target .. ".previous"
-    if not write_file(temporary, contents) then return false, "cannot write " .. temporary end
-    os.remove(backup)
-    local had_target = read_file(target) ~= nil
-    if had_target and not os.rename(target, backup) then
-      os.remove(temporary)
-      return false, "cannot replace " .. target
-    end
-    if not os.rename(temporary, target) then
-      if had_target then os.rename(backup, target) end
-      os.remove(temporary)
-      return false, "cannot install " .. target
-    end
-    os.remove(backup)
-    return true
-  end
-
   local function install_extracted(directory)
-    local source_script = utils.join_path(
-      utils.join_path(directory, "scripts"), "material-osc.lua")
-    local ok, reason = replace_file(source_script, args.script_path)
+    local source_script = filesystem:join(
+      filesystem:join(directory, "scripts"), "material-osc.lua")
+    local ok, reason = filesystem:replace(source_script, args.script_path)
     if not ok then return false, reason end
-    ensure_directory(args.font_dir .. package.config:sub(1, 1) .. "placeholder")
+    filesystem:ensure_directory(args.font_dir)
     for _, font in ipairs({
       "material-osc_google_sans_flex.ttf", "material-osc_icons.otf"
     }) do
-      local source = utils.join_path(utils.join_path(directory, "fonts"), font)
-      local target = utils.join_path(args.font_dir, font)
-      if utils.file_info(source) then
-        ok, reason = replace_file(source, target)
+      local source = filesystem:join(
+        filesystem:join(directory, "fonts"), font)
+      local target = filesystem:join(args.font_dir, font)
+      if filesystem:info(source) then
+        ok, reason = filesystem:replace(source, target)
         if not ok then return false, reason end
       end
     end
@@ -201,31 +140,9 @@ function update_service.new(args)
   end
 
   local function unpack(archive, directory, callback)
-    if not ensure_directory(directory .. package.config:sub(1, 1) .. "placeholder") then
-      callback(false, "could not create the temporary update directory")
-      return
-    end
-    local command
-    if is_windows() then
-      command = {"powershell", "-NoProfile", "-Command",
-        "Expand-Archive -Force -LiteralPath $args[0] -DestinationPath $args[1]",
-        archive, directory}
-    else
-      command = {"unzip", "-oq", archive, "-d", directory}
-    end
-    subprocess(command, function(ok, result)
-      if not ok and not is_windows() then
-        subprocess({"tar", "-xf", archive, "-C", directory}, function(tar_ok, tar_result)
-          if not tar_ok then
-            callback(false, tar_result.stderr or result.stderr or "could not unpack release")
-            return
-          end
-          callback(install_extracted(directory))
-        end)
-        return
-      end
+    filesystem:extract_archive(archive, directory, function(ok, _, reason)
       if not ok then
-        callback(false, result.stderr or "could not unpack release")
+        callback(false, reason)
         return
       end
       callback(install_extracted(directory))
@@ -265,19 +182,19 @@ function update_service.new(args)
     state.open, state.busy, state.error = true, true, nil
     mp.enable_key_bindings("material-osc-update-dialog")
     render()
-    local base = os.tmpname()
-    os.remove(base)
+    local base = filesystem:temporary_base()
     local archive, directory = base .. ".zip", base .. "-material-osc"
-    download(state.asset_url, archive, function(ok, result)
+    download(state.asset_url, archive, function(ok, response)
       if not ok then
         state.busy = false
         state.error = "Download failed. Check your internet connection and try again."
-        msg.error("material-osc update download failed: " .. tostring(result.stderr or ""))
+        msg.error("material-osc update download failed: " ..
+          tostring(response.stderr or ""))
         render()
         return
       end
       unpack(archive, directory, function(installed, reason)
-        os.remove(archive)
+        filesystem:remove(archive)
         state.busy = false
         if installed then
           state.done = true
@@ -305,13 +222,14 @@ function update_service.new(args)
     end
     save_preferences(state.mode, now)
     state.checking = true
-    http_get(API_URL, function(ok, result)
+    http_get(API_URL, function(ok, response)
       state.checking = false
       if not ok then
-        msg.verbose("material-osc update check failed: " .. tostring(result.stderr or ""))
+        msg.verbose("material-osc update check failed: " ..
+          tostring(response.stderr or ""))
         return
       end
-      local release = utils.parse_json(result.stdout or "")
+      local release = utils.parse_json(response.body or "")
       if type(release) ~= "table" or not is_newer(release.tag_name, CURRENT_VERSION) then return end
       fetch_notes(release, function(notes)
         show(release, notes)
@@ -328,16 +246,7 @@ function update_service.new(args)
   end
 
   local function open_url(url, error_message)
-    local os_name = jit and jit.os or ""
-    local command
-    if os_name == "Windows" then
-      command = {"rundll32", "url.dll,FileProtocolHandler", url}
-    elseif os_name == "OSX" then
-      command = {"open", url}
-    else
-      command = {"xdg-open", url}
-    end
-    subprocess(command, function(ok)
+    http:open(url, function(ok)
       if not ok then args.toast:error(error_message, {duration = 2}) end
     end)
   end

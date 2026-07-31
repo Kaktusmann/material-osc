@@ -1,52 +1,26 @@
 local easter_egg_collection = {}
 
 function easter_egg_collection.new(args)
-  local mp, utils = args.mp, args.utils
+  local mp = args.mp
   local database_path = mp.command_native({
     "expand-path", "~~home/material-osc-easter-eggs.json"
+  })
+  local database = args.persistence:json(database_path, {
+    default = function() return {} end
   })
   local service = {counts = {}}
 
   local function read_database()
     if not database_path or database_path == "" then return {} end
-    local file = io.open(database_path, "rb")
-    if not file then return {} end
-    local contents = file:read("*a")
-    file:close()
-    local parsed = utils.parse_json(contents or "")
-    return type(parsed) == "table" and parsed or {}
+    return database:load()
   end
 
   local function write_database()
     if not database_path or database_path == "" then return false end
-    local encoded = utils.format_json({
+    return database:save({
       version = 2,
       counts = service.counts
     })
-    if not encoded then return false end
-
-    local temporary_path = database_path .. ".tmp"
-    local file = io.open(temporary_path, "wb")
-    if not file then return false end
-    local ok = file:write(encoded, "\n")
-    file:close()
-    if not ok then
-      os.remove(temporary_path)
-      return false
-    end
-    if os.rename(temporary_path, database_path) then return true end
-
-    -- Windows cannot replace an existing file with rename. Fall back to a
-    -- direct write there while retaining atomic replacement on other hosts.
-    file = io.open(database_path, "wb")
-    if not file then
-      os.remove(temporary_path)
-      return false
-    end
-    ok = file:write(encoded, "\n")
-    file:close()
-    os.remove(temporary_path)
-    return not not ok
   end
 
   local stored = read_database()

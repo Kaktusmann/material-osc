@@ -32,17 +32,10 @@ function config_watcher.parse(contents, defaults)
   return values
 end
 
-local function read_file(path)
-  local file = io.open(path, "rb")
-  if not file then return "" end
-  local contents = file:read("*a") or ""
-  file:close()
-  return contents
-end
-
 function config_watcher.new(args)
+  local filesystem = args.filesystem
   local service = {
-    contents = read_file(args.path),
+    contents = filesystem:read(args.path) or "",
     preserved = {},
     watch_id = nil,
     reload_timer = nil,
@@ -59,7 +52,7 @@ function config_watcher.new(args)
   end
 
   function service:reload()
-    local contents = read_file(args.path)
+    local contents = filesystem:read(args.path) or ""
     if contents == self.contents then return end
     self.contents = contents
     local values = config_watcher.parse(contents, args.defaults)
@@ -74,73 +67,19 @@ function config_watcher.new(args)
     if next(changed) then args.on_update(changed) end
   end
 
-  local function existing_watch_directory()
-    local directory = args.directory
-    while directory and directory ~= "" do
-      local info = args.utils and args.utils.file_info(directory)
-      if info and info.is_dir then return directory end
-      local normalized = directory:gsub("[/\\]+$", "")
-      local parent = args.utils and select(1, args.utils.split_path(normalized))
-      if not parent or parent == "" or parent == directory then break end
-      directory = parent
-    end
-    return args.directory
-  end
-
-  local function watch_command()
-    local os_name = jit and jit.os or ""
-    local directory = existing_watch_directory()
-    if os_name == "Windows" then
-      local quoted_directory = "'" .. directory:gsub("'", "''") .. "'"
-      return {"powershell", "-NoProfile", "-NonInteractive", "-Command",
-        "$w=New-Object IO.FileSystemWatcher(" .. quoted_directory .. ");" ..
-        "$w.EnableRaisingEvents=$true;" ..
-        "$w.WaitForChanged([IO.WatcherChangeTypes]::All)|Out-Null"}
-    end
-    if os_name == "OSX" then
-      return {"sh", "-c",
-        "command -v fswatch >/dev/null || exit 127; exec fswatch -1 -- $1",
-        "material-osc-config-watch", directory}
-    end
-    return {"sh", "-c",
-      "if command -v inotifywait >/dev/null; then " ..
-        "exec inotifywait -qq -e close_write,create,delete,moved_to -- $1; " ..
-      "elif command -v gio >/dev/null; then " ..
-        "watch_tmp=$(mktemp -d) || exit 1; " ..
-        "watch_fifo=$watch_tmp/event; mkfifo \"$watch_fifo\" || exit 1; " ..
-        "cleanup() { " ..
-          "trap - EXIT INT TERM; " ..
-          "test -n \"$monitor_pid\" && kill \"$monitor_pid\" 2>/dev/null; " ..
-          "test ! -e \"$watch_fifo\" || rm -f \"$watch_fifo\"; " ..
-          "test ! -d \"$watch_tmp\" || rmdir \"$watch_tmp\"; " ..
-        "}; trap cleanup EXIT INT TERM; " ..
-        "gio monitor -d \"$1\" >\"$watch_fifo\" & monitor_pid=$!; " ..
-        "IFS= read -r event <\"$watch_fifo\"; " ..
-      "else exit 127; fi",
-      "material-osc-config-watch", directory}
-  end
-
   function service:schedule_reload()
-    if self.reload_timer then self.reload_timer:kill() end
-    self.reload_timer = args.mp.add_timeout(args.reload_delay or 0.1, function()
-      self.reload_timer = nil
+    args.timers:after(self, "reload_timer", args.reload_delay or 0.1, function()
       self:reload()
     end)
   end
 
   function service:arm()
     if self.stopped or self.watch_id then return end
-    self.watch_id = args.mp.command_native_async({
-      name = "subprocess",
-      args = watch_command(),
-      playback_only = false,
-      capture_stdout = true,
-      capture_stderr = true
-    }, function(success, result)
+    local directory = filesystem:existing_directory(args.directory)
+    self.watch_id = filesystem:watch(directory, function(success, result)
       self.watch_id = nil
       if self.stopped then return end
-      local status = result and tonumber(result.status) or -1
-      if not success or status ~= 0 then
+      if not success then
         self.stopped = true
         if args.on_error then args.on_error(result and result.stderr or "") end
         return
@@ -158,10 +97,9 @@ function config_watcher.new(args)
 
   function service:stop()
     self.stopped = true
-    if self.watch_id then args.mp.abort_async_command(self.watch_id) end
+    if self.watch_id then self.watch_id:cancel() end
     self.watch_id = nil
-    if self.reload_timer then self.reload_timer:kill() end
-    self.reload_timer = nil
+    args.timers:cancel(self, "reload_timer")
   end
 
   return service

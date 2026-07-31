@@ -48,6 +48,7 @@ end
 
 function ytdl_service.new(args)
   local state = args.runtime.ytdl
+  local process = args.process
 
   local function select_quality(item)
     if not item or not item.selector or not state.url then return end
@@ -139,11 +140,8 @@ function ytdl_service.new(args)
     state.active, state.source, state.url = true, "youtube", path
     local command = {"yt-dlp", "--dump-single-json", "--no-playlist", "--no-warnings", path}
     append_raw_options(command)
-    mp.command_native_async({name = "subprocess", args = command,
-      playback_only = false, capture_stdout = true, capture_stderr = true},
-      function(success, result)
-        if request_id ~= state.request_id or not success or not result or
-          result.status ~= 0 then return end
+    process:run_async(command, nil, function(success, result)
+        if request_id ~= state.request_id or not success then return end
         local data = args.utils.parse_json(result.stdout or "")
         if not data or type(data.formats) ~= "table" then return end
         local best = {}

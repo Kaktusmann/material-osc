@@ -10,17 +10,18 @@ end
 
 function assets.initialize(args)
   local directory = script_directory(args.script_dir)
-  local release_font_dir = args.utils.join_path(directory, "../fonts")
+  local filesystem = args.filesystem
+  local release_font_dir = filesystem:join(directory, "../fonts")
   local candidates = {
     release_font_dir,
-    args.utils.join_path(directory, "../../fonts"),
-    args.utils.join_path(directory, "material-osc"),
-    args.utils.join_path(directory, "material-osc/fonts"),
-    args.utils.join_path(directory, "fonts")
+    filesystem:join(directory, "../../fonts"),
+    filesystem:join(directory, "material-osc"),
+    filesystem:join(directory, "material-osc/fonts"),
+    filesystem:join(directory, "fonts")
   }
   local font_dir = candidates[1]
   for _, candidate in ipairs(candidates) do
-    if args.utils.file_info(candidate) then
+    if filesystem:info(candidate) then
       font_dir = candidate
       break
     end

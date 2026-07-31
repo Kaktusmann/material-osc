@@ -2,6 +2,7 @@ local playback_indicator = {}
 
 function playback_indicator.new(args)
   local state, mp, ui = args.state, args.mp, args.ui
+  local timers = args.timers
   local service = {}
 
   function service:show(icon, label, now, label_color)
@@ -10,9 +11,7 @@ function playback_indicator.new(args)
     state.pill_only, state.show_on_empty = false, false
     state.opacity:snap(0); state.scale:snap(0.8)
     state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
-    if state.hide_timer then state.hide_timer:kill() end
-    state.hide_timer = mp.add_timeout(0.28, function()
-      state.hide_timer = nil
+    timers:after(state, "hide_timer", 0.28, function()
       state.opacity:set_target(0, mp.get_time(), 0.20)
       args.render()
     end)
@@ -28,9 +27,7 @@ function playback_indicator.new(args)
     state.show_on_empty = options.show_on_empty == true
     state.opacity:snap(0); state.scale:snap(0.92)
     state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
-    if state.hide_timer then state.hide_timer:kill() end
-    state.hide_timer = mp.add_timeout(options.duration or 1.4, function()
-      state.hide_timer = nil
+    timers:after(state, "hide_timer", options.duration or 1.4, function()
       state.opacity:set_target(0, mp.get_time(), 0.20)
       args.render()
     end)
@@ -143,7 +140,7 @@ function playback_indicator.new(args)
   end
 
   function service:reset()
-    if state.hide_timer then state.hide_timer:kill(); state.hide_timer = nil end
+    timers:cancel(state, "hide_timer")
     state.last_paused, state.last_volume, state.last_muted = nil, nil, nil
     state.last_subtitle_id, state.last_sub_visibility = nil, nil
     state.ab_loop_initialized = false

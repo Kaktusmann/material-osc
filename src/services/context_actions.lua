@@ -1,33 +1,9 @@
 local context_actions = {}
-
-local SPONSORBLOCK_CATEGORIES_COMMENT =
-  "# SponsorBlock categories: sponsor,selfpromo,exclusive_access,interaction," ..
-  "intro,outro,preview,hook,music_offtopic,poi_highlight,filler"
-
-local function sanitize_configuration(existing, order)
-  local allowed = {}
-  for _, name in ipairs(order) do
-    allowed[name] = true
-  end
-
-  local configured, lines = {}, {}
-  local removed_unused = false
-  for line in (existing .. "\n"):gmatch("(.-)\n") do
-    local name = line:match("^%s*([%w_-]+)%s*=")
-    if name and not allowed[name] then
-      removed_unused = true
-    else
-      lines[#lines + 1] = line
-      if name then configured[name] = true end
-    end
-  end
-
-  local preserved = table.concat(lines, "\n"):gsub("%s+$", "")
-  return preserved, configured, removed_unused
-end
+local config_schema = require "src.config.schema"
 
 function context_actions.new(args)
-  local mp, utils = args.mp, args.utils
+  local mp = args.mp
+  local filesystem, http = args.filesystem, args.http
   local properties = args.properties
   local service = {}
 
@@ -70,26 +46,18 @@ function context_actions.new(args)
 
   local function launch(target, reveal)
     if not target or target == "" then return end
-    local os_name = jit and jit.os or ""
-    local command
-    if os_name == "Windows" then
-      command = reveal and {"explorer", "/select," .. target} or
-        (is_url(target) and {"rundll32", "url.dll,FileProtocolHandler", target} or
-          {"powershell", "-NoProfile", "-Command",
-            "Start-Process -FilePath $args[0]", target})
-    elseif os_name == "OSX" then
-      command = reveal and {"open", "-R", target} or {"open", target}
-    else
-      local destination = target
-      if reveal then destination = select(1, utils.split_path(target)) end
-      command = {"xdg-open", destination}
+    if is_url(target) then
+      http:open(target, function(ok)
+        if not ok then
+          args.toast:error("Could not open " .. target, {duration = 2})
+        end
+      end)
+      return
     end
-    mp.command_native_async({
-      name = "subprocess", args = command, playback_only = false,
-      capture_stdout = true, capture_stderr = true
-    }, function(success, result)
-      if not success or not result or result.status ~= 0 then
-        args.toast:error("Could not open " .. target, {duration = 2})
+    filesystem:open(target, {reveal = reveal}, function(ok, _, resolved_path)
+      if not ok then
+        args.toast:error(
+          "Could not open " .. resolved_path, {duration = 2})
       end
     end)
   end
@@ -156,104 +124,20 @@ function context_actions.new(args)
         "mpv configuration directory is unavailable", {duration = 2})
       return
     end
-    if not utils.file_info(config_dir) then
-      local os_name = jit and jit.os or ""
-      local command = os_name == "Windows" and
-        {"powershell", "-NoProfile", "-Command",
-          "New-Item -ItemType Directory -Force -LiteralPath $args[0] | Out-Null",
-          config_dir} or
-        {"mkdir", "-p", config_dir}
-      local result = mp.command_native({
-        name = "subprocess", args = command, playback_only = false,
-        capture_stdout = true, capture_stderr = true
-      })
-      if not result or result.status ~= 0 then
-        args.toast:error(
-          "Could not create script-opts directory", {duration = 2})
-        return
-      end
+    if not filesystem:ensure_directory(config_dir) then
+      args.toast:error(
+        "Could not create script-opts directory", {duration = 2})
+      return
     end
 
-    local config_path = utils.join_path(config_dir, "material-osc.conf")
-    local config_info = utils.file_info(config_path)
-    local existing = ""
-    if config_info then
-      local file = io.open(config_path, "rb")
-      if file then existing = file:read("*a") or ""; file:close() end
-    end
-    local order = {
-      "dpi_scale",
-      "accent_color",
-      "context_menu",
-      "tooltip",
-      "show_mini_seekbar",
-      "screenshot_button",
-      "pip_button",
-      "window_controls",
-      "mouse_timeout",
-      "show_on_mouse_move",
-      "single_click_actions_enabled",
-      "seeking_zone_percentage",
-      "seek_step_seconds",
-      "temporary_speed",
-      "max_volume_percentage",
-      "skip_intro_outro_chapters",
-      "skip_intro_detection_texts",
-      "skip_outro_detection_texts",
-      "force_hwdec",
-      "force_display_resample",
-      "force_force_window",
-      "directory_playlist",
-      "directory_playlist_sort",
-      "youtube_quality",
-      "sponsorblock_should_use",
-      "sponsorblock_auto_skip_categories",
-      "sponsorblock_ignore_categories",
-      "sponsorblock_multicolored_segments",
-      "sponsorblock_show_submit",
-      "sponsorblock_show_voting"
-    }
-    local preserved, configured, removed_unused =
-      sanitize_configuration(existing, order)
-    local missing = {}
-    for _, name in ipairs(order) do
-      if not configured[name] then missing[#missing + 1] = name end
-    end
-    if #missing > 0 or removed_unused then
-      local function config_value(value)
-        if type(value) == "boolean" then return value and "yes" or "no" end
-        local text = tostring(value)
-        if text:find("#", 1, true) then return '"' .. text .. '"' end
-        return text
-      end
-      local lines = {}
-      if preserved ~= "" then
-        lines[#lines + 1] = preserved
-        lines[#lines + 1] = ""
-      else
-        lines[#lines + 1] = "# material-osc configuration"
-        lines[#lines + 1] = "# Changes are applied to running mpv instances."
-        lines[#lines + 1] = ""
-      end
-      local category_comment_added =
-        preserved:find(SPONSORBLOCK_CATEGORIES_COMMENT, 1, true) ~= nil
-      for _, name in ipairs(missing) do
-        if not category_comment_added and
-          (name == "sponsorblock_auto_skip_categories" or
-            name == "sponsorblock_ignore_categories") then
-          lines[#lines + 1] = SPONSORBLOCK_CATEGORIES_COMMENT
-          category_comment_added = true
-        end
-        lines[#lines + 1] = name .. "=" .. config_value(args.opts[name])
-      end
-      local file = io.open(config_path, "wb")
-      if not file then
-        args.toast:error(
-          "Could not create material-osc.conf", {duration = 2})
-        return
-      end
-      file:write(table.concat(lines, "\n"), "\n")
-      file:close()
+    local config_path = filesystem:normalize(
+      filesystem:join(config_dir, "material-osc.conf"))
+    local existing = filesystem:read(config_path) or ""
+    local contents, changed =
+      config_schema.render_configuration(existing, args.opts)
+    if changed and not filesystem:write_atomic(config_path, contents) then
+      args.toast:error("Could not create material-osc.conf", {duration = 2})
+      return
     end
     launch(config_path, false)
   end
@@ -312,6 +196,6 @@ function context_actions.new(args)
   return service
 end
 
-context_actions.sanitize_configuration = sanitize_configuration
+context_actions.sanitize_configuration = config_schema.sanitize
 
 return context_actions

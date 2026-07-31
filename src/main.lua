@@ -1,111 +1,20 @@
 local options = require "mp.options"
-local opts = {
-  -- Appearance
-  dpi_scale = "auto",
-  accent_color = "#00bbff",
-  context_menu = true,
-  tooltip = true,
-  show_mini_seekbar = false,
-  screenshot_button = true,
-  pip_button = true,
-  window_controls = "auto",
+local assdraw = require "mp.assdraw"
+local msg = require "mp.msg"
+local utils = require "mp.utils"
 
-  -- Behavior
-  skip_intro_outro_chapters = "ask",
-  skip_intro_detection_texts =
-    "intro,introduction,opening,op,opening theme",
-  skip_outro_detection_texts =
-    "outro,ending,end credits,credits,closing,ed",
-  mouse_timeout = 2,
-  show_on_mouse_move = false,
-  single_click_actions_enabled = true,
-  seeking_zone_percentage = 15,
-  seek_step_seconds = 5,
-  temporary_speed = 2,
-  max_volume_percentage = 150,
-  directory_playlist = true,
-  directory_playlist_sort = "name",
+local script_source = debug.getinfo(1, "S").source
+if script_source:sub(1, 1) == "@" then script_source = script_source:sub(2) end
+local script_dir = script_source:match("^(.*)[/\\][^/\\]-$") or "."
+package.path = utils.join_path(script_dir, "../?.lua") .. ";" ..
+  utils.join_path(script_dir, "?.lua") .. ";" .. package.path
 
-  -- Force mpv options
-  force_hwdec = false,
-  force_display_resample = true,
-  force_force_window = true,
-
-  -- YouTube
-  youtube_quality = "auto",
-  sponsorblock_should_use = true,
-  sponsorblock_auto_skip_categories = "sponsor",
-  sponsorblock_ignore_categories = "interaction,preview,hook,exclusive_access",
-  sponsorblock_multicolored_segments = true,
-  sponsorblock_show_submit = true,
-  sponsorblock_show_voting = true
-}
-local option_defaults = {}
-for name, value in pairs(opts) do option_defaults[name] = value end
+local config_schema = require "src.config.schema"
+local opts = config_schema.defaults()
+local option_defaults = config_schema.defaults()
 local options_update_handler
 local config_watcher
-local function normalize_option_values(values)
-  for name, default in pairs(option_defaults) do
-    local value = values[name]
-    if type(default) == "string" and type(value) == "string" then
-      local quote = value:sub(1, 1)
-      if (quote == '"' or quote == "'") and value:sub(-1) == quote then
-        values[name] = value:sub(2, -2)
-      end
-    end
-  end
-  values.seeking_zone_percentage = math.max(0,
-    math.min(50, tonumber(values.seeking_zone_percentage) or 15))
-  values.max_volume_percentage = math.max(100,
-    tonumber(values.max_volume_percentage) or 150)
-  values.temporary_speed = math.max(0.01,
-    tonumber(values.temporary_speed) or 2)
-  values.window_controls = tostring(values.window_controls or "auto"):lower()
-  if values.window_controls ~= "yes" and values.window_controls ~= "no" and
-    values.window_controls ~= "auto" then
-    values.window_controls = "auto"
-  end
-  local youtube_quality = tostring(values.youtube_quality or "auto"):lower()
-  local height = youtube_quality:match("^(%d+)p?$")
-  values.youtube_quality = height and tostring(math.max(1,
-    math.floor(tonumber(height)))) or "auto"
-  local category_options = {
-    "sponsorblock_auto_skip_categories",
-    "sponsorblock_ignore_categories"
-  }
-  for _, name in ipairs(category_options) do
-    local categories, seen = {}, {}
-    for category in tostring(values[name] or ""):lower():gmatch("[%w_]+") do
-      if not seen[category] then
-        seen[category] = true
-        categories[#categories + 1] = category
-      end
-    end
-    values[name] = table.concat(categories, ",")
-  end
-  for _, name in ipairs({
-    "skip_intro_detection_texts",
-    "skip_outro_detection_texts"
-  }) do
-    local texts, seen = {}, {}
-    for raw_text in tostring(values[name] or ""):gmatch("[^,]+") do
-      local text = raw_text:lower():match("^%s*(.-)%s*$")
-      if text ~= "" and not seen[text] then
-        seen[text] = true
-        texts[#texts + 1] = text
-      end
-    end
-    values[name] = table.concat(texts, ",")
-  end
-  for name, fallback in pairs({skip_intro_outro_chapters = "ask"}) do
-    local value = tostring(values[name] or fallback):lower()
-    if value ~= "yes" and value ~= "no" and value ~= "ask" then
-      value = fallback
-    end
-    values[name] = value
-  end
-  return values
-end
+local function normalize_option_values(values) return config_schema.normalize(values) end
 options.read_options(opts, "material-osc", function(changed)
   normalize_option_values(opts)
   if config_watcher then config_watcher:preserve(changed) end
@@ -127,16 +36,6 @@ local function apply_forced_mpv_options()
 end
 apply_forced_mpv_options()
 
-local assdraw = require "mp.assdraw"
-local msg = require "mp.msg"
-local utils = require "mp.utils"
-
-local script_source = debug.getinfo(1, "S").source
-if script_source:sub(1, 1) == "@" then script_source = script_source:sub(2) end
-local script_dir = script_source:match("^(.*)[/\\][^/\\]-$") or "."
-package.path = utils.join_path(script_dir, "../?.lua") .. ";" ..
-  utils.join_path(script_dir, "?.lua") .. ";" .. package.path
-
 local animation = require "src.core.animation"
 local animation_coordinator_module = require "src.core.animation_coordinator"
 local application_state = require "src.core.application_state"
@@ -145,6 +44,7 @@ local controller_module = require "src.core.controller"
 local navigation_module = require "src.core.navigation"
 local menu_keyboard_module = require "src.core.menu_keyboard"
 local mpv_runtime_module = require "src.core.mpv_runtime"
+local timers_module = require "src.core.timers"
 local config_watcher_module = require "src.services.config_watcher"
 
 local compose_module = require "src.ui.compose"
@@ -182,6 +82,21 @@ local toast_service_module = require "src.services.toast"
 local temporary_speed_module = require "src.services.temporary_speed"
 local subtitle_position_module = require "src.services.subtitle_position"
 local update_service_module = require "src.services.update_service"
+local filesystem_module = require "src.platform.filesystem"
+local http_module = require "src.platform.http"
+local process_module = require "src.platform.process"
+local platform_runtime = require "src.platform.runtime"
+local dialogs_module = require "src.platform.dialogs"
+local persistence_module = require "src.platform.persistence"
+
+local process = process_module.new({mp = mp})
+local filesystem = filesystem_module.new({
+  mp = mp, utils = utils, process = process, runtime = platform_runtime
+})
+local http = http_module.new({process = process, runtime = platform_runtime})
+local dialogs = dialogs_module.new({process = process, runtime = platform_runtime})
+local persistence = persistence_module.new({filesystem = filesystem, utils = utils})
+local timers = timers_module.new({mp = mp})
 
 local manual_stream_quality_reload = false
 -- Run before mpv's built-in ytdl hook, which uses priority 10.
@@ -598,7 +513,11 @@ local function create_app(services)
   return node
 end
 
-local asset_paths = assets.initialize({script_dir = script_dir, utils = utils, msg = msg})
+local asset_paths = assets.initialize({
+  script_dir = script_dir,
+  filesystem = filesystem,
+  msg = msg
+})
 
 local overlay_layers = {}
 local performance = os.getenv("MATERIAL_OSC_PROFILE") and {
@@ -761,6 +680,7 @@ local toast_service = toast_service_module.new({
   end
 })
 local subtitle_loader = subtitle_loader_module.new({
+  dialogs = dialogs,
   render = function(...) return render(...) end
 })
 local open_subtitle_file_picker = subtitle_loader.open_file_picker
@@ -768,18 +688,20 @@ local open_subtitle_link_picker = subtitle_loader.open_link_picker
 local open_secondary_subtitle_file_picker = subtitle_loader.open_secondary_file_picker
 local open_secondary_subtitle_link_picker = subtitle_loader.open_secondary_link_picker
 local shader_loader = shader_loader_module.new({
-  mp = mp, utils = utils, msg = msg,
+  mp = mp, msg = msg,
+  filesystem = filesystem, http = http, dialogs = dialogs,
   toast = toast_service,
   render = function(...) return render(...) end
 })
 local media_loader = media_loader_module.new({
+  dialogs = dialogs,
   render = function(...) return render(...) end
 })
 
 local controller
 local playback_indicator
 local bookmark_service = bookmark_service_module.new({
-  mp = mp, utils = utils, format_time = format_time,
+  mp = mp, format_time = format_time, persistence = persistence,
   toast = toast_service,
   render = function(...) return render(...) end,
   set_input_active = function(active)
@@ -800,17 +722,19 @@ local bookmark_service = bookmark_service_module.new({
 })
 local easter_egg_collection = easter_egg_collection_module.new({
   mp = mp,
-  utils = utils
+  persistence = persistence
 })
 local context_actions = context_actions_module.new({
-  mp = mp, utils = utils, format_time = format_time,
+  mp = mp, format_time = format_time,
   bookmarks = bookmark_service, opts = opts, properties = runtime.properties,
+  filesystem = filesystem, http = http,
   toast = toast_service,
   render = function(...) return render(...) end
 })
 
 local stream_quality = stream_quality_module.new({
   runtime = runtime, utils = utils,
+  http = http, process = process,
   toast = toast_service,
   render = function(...) return render(...) end,
   set_settings_page = set_settings_page,
@@ -822,13 +746,17 @@ local sponsorblock_service = sponsorblock_module.new({
   runtime = runtime,
   opts = opts,
   utils = utils,
+  mp = mp, persistence = persistence,
+  http = http,
+  timers = timers,
   toast = toast_service,
   youtube_url = function() return runtime.ytdl.url end,
   render = function() if render then render(false) end end
 })
 sponsorblock_service:register_bindings()
 local directory_playlist = directory_playlist_module.new({
-  mp = mp, utils = utils, opts = opts
+  mp = mp, filesystem = filesystem, platform_runtime = platform_runtime,
+  opts = opts
 })
 local function select_stream_quality(item) stream_quality:select(item) end
 local function attach_ytdl_caption(item) stream_quality:attach_caption(item) end
@@ -936,12 +864,14 @@ local Visibility, Row, Column, Pill =
 local ConnectedPill = compose.ConnectedPill
 local updater = update_service_module.new({
   state = runtime, mp = mp, utils = utils, msg = msg,
+  filesystem = filesystem, http = http, persistence = persistence,
   toast = toast_service,
   script_path = script_source, font_dir = asset_paths.release_font_dir,
   render = function() if render then render() end end
 })
 local services = {
   state = runtime,
+  timers = timers,
   updater = updater,
   bookmarks = bookmark_service,
   easter_eggs = easter_egg_collection,
@@ -956,7 +886,10 @@ local services = {
     max_volume_percentage = max_volume_percentage,
     temporary_speed = function() return opts.temporary_speed end
   },
-  platform = {msg = msg, utils = utils},
+  platform = {
+    msg = msg, filesystem = filesystem, process = process,
+    runtime = platform_runtime
+  },
   effects = {
     render = function() return render(false, "interaction") end,
     render_all = function() return render(false) end,
@@ -1021,6 +954,7 @@ local services = {
 services.keybinding_hints = keybinding_hints
 playback_indicator = playback_indicator_module.new({
   state = runtime.playback_indicator, mp = mp, ui = services.ui,
+  timers = timers,
   render = function() render() end
 })
 toast_service:bind(playback_indicator)
@@ -1298,9 +1232,10 @@ local config_path = mp.find_config_file("script-opts/material-osc.conf") or
   mp.command_native({"expand-path", "~~/script-opts/material-osc.conf"})
 config_watcher = config_watcher_module.new({
   mp = mp,
-  utils = utils,
+  timers = timers,
+  filesystem = filesystem,
   path = config_path,
-  directory = select(1, utils.split_path(config_path)),
+  directory = select(1, filesystem:split(config_path)),
   options = opts,
   defaults = option_defaults,
   normalize = normalize_option_values,

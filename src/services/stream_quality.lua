@@ -55,6 +55,7 @@ end
 
 function hls_module.new(args)
   local state = args.runtime.ytdl
+  local http = args.http
   local service = {}
 
   function service:load_qualities()
@@ -71,14 +72,9 @@ function hls_module.new(args)
     state.active, state.source, state.url = true, "hls", path
     state.items, state.caption_items = {}, {}
     state.selected_id, state.pending_selected_id = nil, nil
-    mp.command_native_async({
-      name = "subprocess", playback_only = false, capture_stdout = true,
-      capture_stderr = true,
-      args = {"curl", "--location", "--fail", "--silent", "--show-error", path}
-    }, function(success, result)
-      if request_id ~= state.request_id or not success or not result or
-        result.status ~= 0 then return end
-      state.items = parse_master_playlist(path, result.stdout or "")
+    http:get(path, {fail = true}, function(success, response)
+      if request_id ~= state.request_id or not success then return end
+      state.items = parse_master_playlist(path, response.body or "")
       state.active = #state.items > 0
       args.render()
     end)

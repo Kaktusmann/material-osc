@@ -24,9 +24,10 @@ local function is_remote(path)
 end
 
 function directory_playlist.new(args)
-  local mp, utils, opts = args.mp, args.utils, args.opts
+  local mp, opts = args.mp, args.opts
+  local filesystem = args.filesystem
   local service = {}
-  local is_windows = package.config:sub(1, 1) == "\\"
+  local is_windows = args.platform_runtime.is_windows
 
   local function same_name(left, right)
     if is_windows then return left:lower() == right:lower() end
@@ -44,13 +45,13 @@ function directory_playlist.new(args)
     local source = mp.get_property("path", "") or ""
     if source == "" or is_remote(source) then return end
 
-    local directory, current_name = utils.split_path(source)
+    local directory, current_name = filesystem:split(source)
     if not current_name or current_name == "" then return end
     if not directory or directory == "" then
       directory = mp.get_property("working-directory", ".") or "."
     end
 
-    local filenames = utils.readdir(directory, "files")
+    local filenames = filesystem:list(directory, "files")
     if not filenames then return end
 
     local items = {}
@@ -58,8 +59,8 @@ function directory_playlist.new(args)
       local ext = extension(name)
       if same_name(name, current_name) or
         (ext and MEDIA_EXTENSIONS[ext:lower()]) then
-        local path = utils.join_path(directory, name)
-        local info = utils.file_info(path)
+        local path = filesystem:join(directory, name)
+        local info = filesystem:info(path)
         if info and info.is_file then
           items[#items + 1] = {
             name = name,

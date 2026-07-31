@@ -83,22 +83,6 @@ local function same_prompt(a, b)
   return a and b and a.id == b.id and a.end_time == b.end_time
 end
 
-local function read_file(path)
-  local file = io.open(path, "rb")
-  if not file then return nil end
-  local value = file:read("*a")
-  file:close()
-  return value
-end
-
-local function write_file(path, value)
-  local file = io.open(path, "wb")
-  if not file then return false end
-  file:write(value)
-  file:close()
-  return true
-end
-
 local function random_user_id()
   local alphabet =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -118,6 +102,11 @@ end
 function sponsorblock.new(args)
   local state = args.runtime.sponsorblock
   local opts, utils = args.opts, args.utils
+  local http = args.http
+  local timers = args.timers
+  local user_id_path = args.mp.command_native(
+    {"expand-path", "~~/script-opts/material-osc-sponsorblock-id"})
+  local user_id_store = args.persistence:text(user_id_path)
   local service = {
     request_id = 0,
     command_ids = {},
@@ -210,60 +199,34 @@ function sponsorblock.new(args)
 
   local function user_id()
     if state.user_id then return state.user_id end
-    local path = mp.command_native(
-      {"expand-path", "~~/script-opts/material-osc-sponsorblock-id"})
-    local stored = path and read_file(path)
+    local stored = user_id_path and user_id_store:load()
     stored = stored and stored:match("^%s*([%w]+)%s*$") or nil
     if stored and #stored >= 32 then
       state.user_id = stored
       return stored
     end
     state.user_id = random_user_id()
-    if path then write_file(path, state.user_id) end
+    if user_id_path then user_id_store:save(state.user_id) end
     return state.user_id
   end
 
   local function request(request_args, callback)
-    local command = {
-      "curl", "--location", "--silent", "--show-error",
-      "--connect-timeout", "5", "--max-time", "20",
-      "--user-agent", USER_AGENT,
-      "--write-out", "\n%{http_code}"
-    }
-    if request_args.method == "GET" or request_args.query then
-      command[#command + 1] = "--get"
-    end
-    if request_args.method and request_args.method ~= "GET" then
-      command[#command + 1] = "--request"
-      command[#command + 1] = request_args.method
-    end
-    for _, header in ipairs(request_args.headers or {}) do
-      command[#command + 1] = "--header"
-      command[#command + 1] = header
-    end
-    for key, value in pairs(request_args.form or {}) do
-      command[#command + 1] = "--data-urlencode"
-      command[#command + 1] = tostring(key) .. "=" .. tostring(value)
-    end
-    if request_args.body then
-      command[#command + 1] = "--data-binary"
-      command[#command + 1] = request_args.body
-    end
-    command[#command + 1] = SERVER .. request_args.path
-    local command_id
-    command_id = mp.command_native_async({
-      name = "subprocess", args = command, playback_only = false,
-      capture_stdout = true, capture_stderr = true
-    }, function(success, result)
-      service.command_ids[command_id] = nil
-      local output = result and result.stdout or ""
-      local status = tonumber(output:match("\n(%d%d%d)%s*$")) or 0
-      local body = output:gsub("\n%d%d%d%s*$", "")
-      callback(success and result and result.status == 0, status, body,
-        result and result.stderr or "")
+    local operation
+    operation = http:request(SERVER .. request_args.path, {
+      method = request_args.method,
+      query = request_args.query,
+      headers = request_args.headers,
+      form = request_args.form,
+      body = request_args.body,
+      connect_timeout = 5,
+      max_time = 20,
+      user_agent = USER_AGENT
+    }, function(success, response)
+      service.command_ids[operation] = nil
+      callback(success, response.status, response.body, response.stderr)
     end)
-    if command_id then
-      service.command_ids[command_id] = request_args.cancel_on_reset ~= false
+    if operation then
+      service.command_ids[operation] = request_args.cancel_on_reset ~= false
     end
   end
 
@@ -279,9 +242,7 @@ function sponsorblock.new(args)
   end
 
   local function clear_feedback_timer()
-    if not service.feedback_timer then return end
-    service.feedback_timer:kill()
-    service.feedback_timer = nil
+    timers:cancel(service, "feedback_timer")
   end
 
   local function clear_feedback()
@@ -297,15 +258,11 @@ function sponsorblock.new(args)
       vote = nil
     }
     state.feedback = feedback
-    local timer
-    timer = mp.add_timeout(5, function()
-      if service.feedback_timer ~= timer then return end
-      service.feedback_timer = nil
+    timers:after(service, "feedback_timer", 5, function()
       if state.feedback ~= feedback then return end
       state.feedback = nil
       render()
     end)
-    service.feedback_timer = timer
   end
 
   local function skip(segment)
@@ -614,10 +571,10 @@ function sponsorblock.new(args)
   function service:reset()
     self.request_id = self.request_id + 1
     clear_feedback_timer()
-    for command_id, cancel_on_reset in pairs(self.command_ids) do
+    for operation, cancel_on_reset in pairs(self.command_ids) do
       if cancel_on_reset then
-        mp.abort_async_command(command_id)
-        self.command_ids[command_id] = nil
+        operation:cancel()
+        self.command_ids[operation] = nil
       end
     end
     state.active, state.loading, state.video_id = false, false, nil
@@ -869,8 +826,8 @@ function sponsorblock.new(args)
   function service:dispose()
     self.request_id = self.request_id + 1
     clear_feedback_timer()
-    for command_id in pairs(self.command_ids) do
-      mp.abort_async_command(command_id)
+    for operation in pairs(self.command_ids) do
+      operation:cancel()
     end
     self.command_ids = {}
   end

@@ -2,30 +2,22 @@ local bookmarks = {}
 local input = require "mp.input"
 
 function bookmarks.new(args)
-  local mp, utils = args.mp, args.utils
+  local mp = args.mp
   local service = {data = {}, current_key = nil, base_chapters = {}}
   local database_path = mp.command_native({"expand-path",
     "~~home/material-osc-bookmarks.json"})
+  local database = args.persistence:json(database_path, {
+    default = function() return {} end
+  })
 
   local function read_database()
     if not database_path or database_path == "" then return {} end
-    local file = io.open(database_path, "rb")
-    if not file then return {} end
-    local contents = file:read("*a")
-    file:close()
-    local parsed = utils.parse_json(contents or "")
-    return type(parsed) == "table" and parsed or {}
+    return database:load()
   end
 
   local function write_database(data)
     if not database_path or database_path == "" then return false end
-    local encoded = utils.format_json(data)
-    if not encoded then return false end
-    local file = io.open(database_path, "wb")
-    if not file then return false end
-    file:write(encoded, "\n")
-    file:close()
-    return true
+    return database:save(data)
   end
 
   local function normalize_numbers(data)

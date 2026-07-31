@@ -4,6 +4,7 @@ function edge_seek.new(services)
   local state, ui = services.state, services.ui
   local opts = services.config.opts
   local render = services.effects.render
+  local timers = services.timers
   local step = math.max(1, tonumber(opts.seek_step_seconds) or 5)
   local zone_fraction = opts.seeking_zone_percentage / 100
   local step_label = string.format("%g", step)
@@ -23,11 +24,9 @@ function edge_seek.new(services)
     bounds.on_click = function()
       mp.commandv("seek", tostring(amount), "relative")
       local visual = state.edge_seek[side]
-      if visual.feedback_timer then visual.feedback_timer:kill() end
       visual.feedback:snap(0)
       visual.feedback:set_target(1)
-      visual.feedback_timer = mp.add_timeout(0.10, function()
-        visual.feedback_timer = nil
+      timers:after(visual, "feedback_timer", 0.10, function()
         visual.feedback:set_target(0)
         render()
       end)

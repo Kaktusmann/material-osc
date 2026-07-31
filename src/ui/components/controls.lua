@@ -2,6 +2,7 @@ local controls = {}
 
 function controls.new(services)
   local state, ui, player = services.state, services.ui, services.player
+  local timers = services.timers
   local navigation, config = services.navigation, services.config
   local pointer, volume_state = state.pointer, state.volume
   local seek_state, tooltip_state = state.seek, state.tooltip
@@ -34,10 +35,7 @@ function controls.new(services)
   local is_render_pass = ui.is_render_pass
 
   local function set_pip_enabled(enabled)
-    if state.pip.raise_timer then
-      state.pip.raise_timer:kill()
-      state.pip.raise_timer = nil
-    end
+    timers:cancel(state.pip, "raise_timer")
     if enabled then
       state.pip.restore = {
         fullscreen = mp.get_property_native("fullscreen") == true,
@@ -70,15 +68,11 @@ function controls.new(services)
       if restore.ontop then
         mp.set_property_bool("ontop", true)
       else
-        local raise_timer
-        raise_timer = mp.add_timeout(0.12, function()
-          if state.pip.raise_timer ~= raise_timer then return end
-          state.pip.raise_timer = nil
+        timers:after(state.pip, "raise_timer", 0.12, function()
           if not state.pip.active then
             mp.set_property_bool("ontop", false)
           end
         end)
-        state.pip.raise_timer = raise_timer
       end
     end
     render_all()
