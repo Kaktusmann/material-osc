@@ -118,8 +118,8 @@ start at the linked video. To keep mpv's single-video behavior, explicitly set
 | Option | Default | Accepted values | Description |
 | --- | --- | --- | --- |
 | `sponsorblock_should_use` | `yes` | `yes`, `no` | Enables SponsorBlock loading, skipping, prompts, markers, voting, and submission for YouTube videos. |
-| `sponsorblock_auto_skip_categories` | `sponsor` | Comma-separated category IDs | Categories that are skipped automatically. |
-| `sponsorblock_ignore_categories` | `interaction,preview,hook,exclusive_access` | Comma-separated category IDs | Categories that are not loaded or acted upon. Ignore takes precedence when a category is also listed for auto-skip. |
+| `sponsorblock_auto_skip_categories` | `...` | Comma-separated category IDs | Categories that are skipped automatically. |
+| `sponsorblock_ignore_categories` | `...` | Comma-separated category IDs | Categories that are not loaded or acted upon. Ignore takes precedence when a category is also listed for auto-skip. |
 | `sponsorblock_multicolored_segments` | `yes` | `yes`, `no` | Colors seekbar segments by category. When disabled, all segments use yellow. |
 | `sponsorblock_show_submit` | `yes` | `yes`, `no` | Shows SponsorBlock segment marking, category, and submission controls. |
 | `sponsorblock_show_voting` | `yes` | `yes`, `no` | Shows upvote and downvote controls after skipping a submitted SponsorBlock segment. |
