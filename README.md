@@ -41,8 +41,9 @@ With `window_controls=auto`, material-osc provides minimize, maximize/restore,
 and close buttons when mpv runs without native window decorations (`border=no`
 in `mpv.conf`) or enters fullscreen.
 
-The script disables automatic window resizing and starts the window at 66% of
-the screen height. Its width is calculated from the video's aspect ratio.
+The script disables automatic window resizing. With `force_geometry=yes`, it
+also starts the window at 66% of the screen height, with width calculated
+from the video's aspect ratio; see `force_geometry` below.
 
 </details>
 
@@ -60,7 +61,7 @@ the screen height. Its width is calculated from the video's aspect ratio.
 | `show_remaining_time` | `no` | `yes`, `no` | Shows remaining time instead of elapsed time by default. The time display remains clickable to toggle modes. |
 | `adjust_time_with_speed` | `yes` | `yes`, `no` | Adjusts elapsed, remaining, and total displayed time for the current playback speed. |
 | `adjust_subtitle_position` | `yes` | `yes`, `no` | Moves bottom-aligned subtitles above the OSC while it is visible. Set to `no` to preserve mpv's configured `sub-pos`. |
-| `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. |
+| `max_volume_percentage` | `150` | Percentage; minimum `100` | Sets mpv's upper volume limit and the OSC volume range. Left at its default, material-osc preserves mpv's configured `volume-max` instead; set this explicitly to override it. |
 
 </details>
 
@@ -85,8 +86,9 @@ dash. An empty list disables detection for that chapter type.
 | Option | Default | Accepted values | Description |
 | --- | --- | --- | --- |
 | `force_hwdec` | `no` | `yes`, `no` | With `no`, preserves mpv's configured `hwdec` value. Set to `yes` to opt into `hwdec=auto`; this may be unstable with some live streams and hybrid-GPU systems. |
-| `force_display_resample` | `yes` | `yes`, `no` | With `no`, preserves mpv's configured `video-sync` value. Set to `yes` to opt into `video-sync=display-resample`. |
-| `force_force_window` | `yes` | `yes`, `no` | Keeps an mpv window open even before a file is loaded. With `no`, material-osc preserves the configured `force-window` value. |
+| `force_display_resample` | `no` | `yes`, `no` | With `no`, preserves mpv's configured `video-sync` value. Set to `yes` to opt into `video-sync=display-resample`. |
+| `force_force_window` | `no` | `yes`, `no` | With `no`, preserves mpv's configured `force-window` value. Set to `yes` to keep an mpv window open even before a file is loaded. |
+| `force_geometry` | `no` | `yes`, `no` | With `no`, preserves mpv's configured `geometry`/`autofit` value. Set to `yes` to opt into material-osc's 66%-of-screen-height default window size. |
 
 </details>
 

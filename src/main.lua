@@ -27,12 +27,15 @@ local configured_video_sync =
   mp.get_property("video-sync", "audio") or "audio"
 local configured_force_window =
   mp.get_property("force-window", "no") or "no"
+local configured_geometry = mp.get_property("geometry", "") or ""
 local function apply_forced_mpv_options()
   mp.set_property("hwdec", opts.force_hwdec and "auto" or configured_hwdec)
   mp.set_property("video-sync", opts.force_display_resample and
     "display-resample" or configured_video_sync)
   mp.set_property("force-window", opts.force_force_window and
     "yes" or configured_force_window)
+  mp.set_property("geometry", opts.force_geometry and
+    "x66%" or configured_geometry)
 end
 apply_forced_mpv_options()
 
@@ -587,7 +590,6 @@ local clamp = function(value, minimum, maximum)
 end
 local dp = function(value) return ui_renderer:dp(value) end
 local edge_seek_top_inset = function() return dp(64) end
-mp.set_property("geometry", "x66%")
 
 local text_metrics = text_metrics_module.new({
   dp = dp,
@@ -598,8 +600,12 @@ local truncate_utf8 = text_metrics.truncate
 local text_intrinsic_width = text_metrics.width
 local truncate_utf8_to_width = text_metrics.truncate_to_width
 
-local max_volume_percentage = math.max(
-  100, tonumber(opts.max_volume_percentage) or 150)
+local configured_volume_max = mp.get_property_number("volume-max", 100) or 100
+local max_volume_percentage = configured_volume_max
+if opts.max_volume_percentage ~= option_defaults.max_volume_percentage then
+  max_volume_percentage = opts.max_volume_percentage
+end
+max_volume_percentage = math.max(100, max_volume_percentage)
 mp.set_property_number("volume-max", max_volume_percentage)
 
 local ass_color = function(hex) return ui_renderer:ass_color(hex) end
@@ -1261,7 +1267,7 @@ options_update_handler = function(changed)
     runtime_host:set_context_menu_enabled(opts.context_menu)
   end
   if changed.force_hwdec or changed.force_display_resample or
-    changed.force_force_window then
+    changed.force_force_window or changed.force_geometry then
     apply_forced_mpv_options()
   end
   if changed.temporary_speed then temporary_speed:update_target() end

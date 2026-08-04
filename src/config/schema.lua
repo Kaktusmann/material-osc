@@ -67,8 +67,9 @@ local definitions = {
     normalize = csv("[^,]+")},
 
   {name = "force_hwdec", default = false, group = "mpv"},
-  {name = "force_display_resample", default = true, group = "mpv"},
-  {name = "force_force_window", default = true, group = "mpv"},
+  {name = "force_display_resample", default = false, group = "mpv"},
+  {name = "force_force_window", default = false, group = "mpv"},
+  {name = "force_geometry", default = false, group = "mpv"},
   {name = "directory_playlist", default = true, group = "playlist"},
   {name = "directory_playlist_sort", default = "name", group = "playlist",
     normalize = enum("name", {"name", "newest", "oldest"})},
