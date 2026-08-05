@@ -15,7 +15,8 @@ function subtitle_position.new(args)
     last_value = nil,
     last_margin = nil,
     offset_animation = offset_animation,
-    initialized = false
+    initialized = false,
+    enabled = args.enabled ~= false
   }
 
   local function set_number(value)
@@ -46,8 +47,23 @@ function subtitle_position.new(args)
   end
   mp.observe_property(property, "native", observe_position)
 
+  function service:set_enabled(enabled)
+    enabled = enabled ~= false
+    if self.enabled == enabled then return false end
+    self.enabled = enabled
+    if not enabled then
+      set_number(self.baseline)
+      publish_margin(0)
+      self.initialized = false
+      self.offset_animation:snap(0)
+    end
+    return true
+  end
+
   function service:update(controller_height, visibility_target, viewport_height,
-      now)
+      now, enabled)
+    self:set_enabled(enabled)
+    if not self.enabled then return end
     viewport_height = math.max(1, tonumber(viewport_height) or 1)
     controller_height = math.max(0, tonumber(controller_height) or 0)
     visibility_target = math.max(
@@ -74,7 +90,8 @@ function subtitle_position.new(args)
   end
 
   function service:is_running()
-    return self.initialized and self.offset_animation:is_running()
+    return self.enabled and self.initialized and
+      self.offset_animation:is_running()
   end
 
   function service:dispose()

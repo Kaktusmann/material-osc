@@ -201,7 +201,7 @@ function mpv_runtime.new(args)
       local name = property[1]
       mp.observe_property(name, property[2], function(_, value)
         state.properties[name] = value
-        if args.property_changed then args.property_changed(name) end
+        if args.property_changed then args.property_changed(name, value) end
         args.render()
       end)
     end

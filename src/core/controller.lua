@@ -111,16 +111,38 @@ function controller.new(args)
     return false
   end
 
+  function service:window_controls_hovered()
+    return (runtime.window_controls.reveal_bounds and
+      args.mouse_in(runtime.window_controls.reveal_bounds)) or false
+  end
+
+  function service:update_window_controls_hover()
+    local hovered = self:window_controls_hovered()
+    local changed = runtime.window_controls.hovered ~= hovered
+    runtime.window_controls.hovered = hovered
+    if changed and args.window_controls_hover_changed then
+      args.window_controls_hover_changed(hovered)
+    end
+    return changed
+  end
+
   function service:should_show_at_pointer()
     if self:interaction_requires_visibility() then return true end
     return (runtime.controller.bounds and args.mouse_in(runtime.controller.bounds)) or
-      (runtime.window_controls.reveal_bounds and
-        args.mouse_in(runtime.window_controls.reveal_bounds)) or
       (runtime.volume.popup_bounds and args.mouse_in(runtime.volume.popup_bounds)) or false
   end
 
   function service:sync_visibility_with_pointer()
     local pointer_active = runtime.pointer.x >= 0 and runtime.pointer.y >= 0
+    if pointer_active and not opts.show_on_mouse_move and
+      self:window_controls_hovered() and
+      not self:interaction_requires_visibility() then
+      self:cancel_hide_timer()
+      local changed = self:animate_visibility(false)
+      runtime.controller.hide_cursor_after_fade = false
+      args.set_cursor_autohide("no")
+      return changed
+    end
     local show_from_pointer =
       pointer_active and (runtime.pip.active or opts.show_on_mouse_move)
     if show_from_pointer or self:should_show_at_pointer() then
@@ -165,8 +187,11 @@ function controller.new(args)
       runtime.pointer.context_hover_hitbox = nil
     end
 
+    local window_controls_changed = self:update_window_controls_hover()
+
     local edge_changed = args.pointer_feedback_changed and
       args.pointer_feedback_changed()
+    if window_controls_changed then return "interaction" end
     if hover_changed or context_changed or edge_changed or
       position_pill_changed then
       return "interaction"
@@ -179,14 +204,24 @@ function controller.new(args)
     runtime.timers.pointer_move = nil
     runtime.pointer.last_move_dispatch = mp.get_time()
     runtime.controller.pointer_timed_out = false
-    local cursor_timeout = math.max(100,
-      math.floor(math.max(0, tonumber(opts.mouse_timeout) or 0) * 1000 + 0.5))
-    args.set_cursor_autohide(cursor_timeout)
+    local timeout = math.max(0, tonumber(opts.mouse_timeout) or 0)
+    if timeout <= 0 or self:window_controls_hovered() then
+      args.set_cursor_autohide("no")
+    else
+      local cursor_timeout = math.max(100,
+        math.floor(timeout * 1000 + 0.5))
+      args.set_cursor_autohide(cursor_timeout)
+    end
     local active = runtime.pointer.active
     if active and active.on_move then active.on_move(active) end
-    local rendered = self:sync_visibility_with_pointer()
+    -- Update top-hover ownership before hiding or showing the bottom
+    -- controller. Any visibility render triggered below then sees the correct
+    -- independent window-control state.
     local feedback_mode = self:pointer_visual_feedback_changed()
-    if feedback_mode and not rendered then
+    local rendered = self:sync_visibility_with_pointer()
+    if feedback_mode == "layout" and not rendered and args.render_layout then
+      args.render_layout()
+    elseif feedback_mode and not rendered then
       if feedback_mode == "dynamic" and args.render_dynamic then
         args.render_dynamic()
       else
@@ -224,9 +259,11 @@ function controller.new(args)
     runtime.controller.pointer_timed_out = true
     runtime.pointer.last_move_dispatch = mp.get_time()
     args.thumbnail:clear()
-    local rendered = self:sync_visibility_with_pointer()
     local feedback_mode = self:pointer_visual_feedback_changed()
-    if feedback_mode and not rendered then
+    local rendered = self:sync_visibility_with_pointer()
+    if feedback_mode == "layout" and not rendered and args.render_layout then
+      args.render_layout()
+    elseif feedback_mode and not rendered then
       if feedback_mode == "dynamic" and args.render_dynamic then
         args.render_dynamic()
       else
@@ -238,6 +275,7 @@ function controller.new(args)
   function service:on_primary_down()
     runtime.controller.pointer_timed_out = false
     self:update_mouse()
+    self:update_window_controls_hover()
     local _, box = args.hitbox_at_cursor()
     if box and box.on_press then
       if box.on_move or box.on_release then runtime.pointer.active = box end
@@ -252,6 +290,7 @@ function controller.new(args)
   function service:on_primary_double()
     runtime.controller.pointer_timed_out = false
     self:update_mouse()
+    self:update_window_controls_hover()
     local _, box = args.hitbox_at_cursor()
     if box and box.on_double then
       runtime.pointer.pending_click = nil
@@ -311,6 +350,7 @@ function controller.new(args)
     if event and event.event == "down" then
       runtime.controller.pointer_timed_out = false
       self:update_mouse()
+      self:update_window_controls_hover()
       local name = args.hitbox_at_cursor()
       if name == "window-drag-area" then
         runtime.pointer.window_dragging = true

@@ -28,7 +28,9 @@ function media_loader.new(args)
     local title = mode == "append" and "Add link to playlist" or "Open link"
     local prompt = mode == "append" and
       "Enter a media URL to add to the playlist:" or "Enter a media URL:"
-    dialogs:prompt_text({title = title, message = prompt},
+    dialogs:prompt_text({
+      title = title, message = prompt, prefill_clipboard_link = true
+    },
       function(output) load_sources(output, mode) end)
   end
 

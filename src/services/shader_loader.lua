@@ -73,7 +73,8 @@ function shader_loader.new(args)
     local title = "Add video shader link"
     dialogs:prompt_text({
       title = title,
-      message = "Enter a shader URL:"
+      message = "Enter a shader URL:",
+      prefill_clipboard_link = true
     }, download_shader)
   end
 

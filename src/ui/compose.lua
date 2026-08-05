@@ -250,7 +250,8 @@ function compose.new(deps)
     if not modifier.background_color then return end
     draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
          shape_radius(modifier.background_shape, bounds),
-         modifier.background_color, modifier.background_alpha)
+         modifier.background_color, modifier.background_alpha,
+         modifier.ignore_controller_fade)
   end
 
   local function draw_modifier_interaction(ass, bounds, modifier)
@@ -291,7 +292,8 @@ function compose.new(deps)
       local inset = modifier.hover_inset or 0
       draw_box(ass, bounds.x + inset, bounds.y + inset, bounds.x2 - inset,
            bounds.y2 - inset, (bounds.h - inset * 2) / 2,
-           modifier.hover_color, modifier.hover_alpha)
+           modifier.hover_color, modifier.hover_alpha,
+           modifier.ignore_controller_fade)
     end
   end
 
@@ -322,6 +324,7 @@ function compose.new(deps)
       icon_size = args.icon_size or args.size or icon_text_size,
       alpha = args.alpha,
       render_pass = args.render_pass,
+      ignore_controller_fade = args.ignore_controller_fade == true,
       enabled = args.enabled ~= false,
       on_click = args.on_click,
       on_scroll_up = args.on_scroll_up,
@@ -344,6 +347,7 @@ function compose.new(deps)
         if node.enabled and node.on_scroll_down then node.on_scroll_down() end
       end
     }):hoverIndication()
+    node.modifier.ignore_controller_fade = node.ignore_controller_fade
 
     function node:update(props)
       if props.icon ~= nil then self.icon = props.icon end
@@ -392,12 +396,12 @@ function compose.new(deps)
               math.floor(255 - 255 * opacity * fraction + 0.5))
           end
           draw_icon(ass, center_x, center_y, self.icon, icon_color, self.icon_size,
-            faded_alpha(1 - progress))
+            faded_alpha(1 - progress), self.ignore_controller_fade)
           draw_icon(ass, center_x, center_y, self.transition_icon, icon_color,
-            self.icon_size, faded_alpha(progress))
+            self.icon_size, faded_alpha(progress), self.ignore_controller_fade)
         else
           draw_icon(ass, center_x, center_y, self.icon, icon_color, self.icon_size,
-            icon_alpha)
+            icon_alpha, self.ignore_controller_fade)
         end
       end
       if self.tooltip and self.enabled and mouse_in(bounds) then

@@ -24,6 +24,16 @@ local function applescript_string(value)
   return '"' .. tostring(value):gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
 end
 
+local function clipboard_link(value)
+  local link = tostring(value or ""):match("^%s*(.-)%s*$")
+  if link == "" or link:find("[%c%s]") then return "" end
+  if link:match("^[%a][%w+%.%-]*://.+$") or
+    link:match("^magnet:%?.+$") then
+    return link
+  end
+  return ""
+end
+
 function dialogs.new(args)
   local process, runtime = args.process, args.runtime
   local service = {}
@@ -37,6 +47,37 @@ function dialogs.new(args)
         fallback()
       end
     end
+  end
+
+  local function read_clipboard(callback)
+    local commands
+    if runtime.is_windows then
+      commands = {windows_command.powershell(
+        "[Console]::Write((Get-Clipboard -Raw))")}
+    elseif runtime.is_macos then
+      commands = {{"pbpaste"}}
+    else
+      commands = {
+        {"wl-paste", "--no-newline"},
+        {"xclip", "-selection", "clipboard", "-out"},
+        {"xsel", "--clipboard", "--output"}
+      }
+    end
+
+    local index = 0
+    local function try_next()
+      index = index + 1
+      local command = commands[index]
+      if not command then
+        callback("")
+        return
+      end
+      process:run_async(command, nil, function(ok, result)
+        local output = result and result.stdout or ""
+        if ok then callback(output) else try_next() end
+      end)
+    end
+    return try_next()
   end
 
   function service:pick_files(options, callback)
@@ -112,35 +153,46 @@ function dialogs.new(args)
     options = options or {}
     local title = tostring(options.title or "Input")
     local message = tostring(options.message or "")
-    local default = tostring(options.default or "")
-    if runtime.is_windows then
-      local script = table.concat({
-        "Add-Type -AssemblyName Microsoft.VisualBasic;",
-        "$value=[Microsoft.VisualBasic.Interaction]::InputBox(",
-        "$argument1,$argument2,$argument3);",
-        "[Console]::Write($value)"
-      }, " ")
-      return process:run_async(windows_command.powershell(
-        script, {message, title, default}), nil, handle_result(callback))
+    local fallback_default = tostring(options.default or "")
+
+    local function show(default)
+      if runtime.is_windows then
+        local script = table.concat({
+          "Add-Type -AssemblyName Microsoft.VisualBasic;",
+          "$value=[Microsoft.VisualBasic.Interaction]::InputBox(",
+          "$argument1,$argument2,$argument3);",
+          "[Console]::Write($value)"
+        }, " ")
+        return process:run_async(windows_command.powershell(
+          script, {message, title, default}), nil, handle_result(callback))
+      end
+      if runtime.is_macos then
+        local script = table.concat({
+          "on run argv",
+          "return text returned of (display dialog (item 1 of argv) " ..
+            "default answer (item 3 of argv) with title (item 2 of argv))",
+          "end run"
+        }, "\n")
+        return process:run_async(
+          {"osascript", "-e", script, "--", message, title, default}, nil,
+          handle_result(callback))
+      end
+      local zenity = {"zenity", "--entry", "--title=" .. title,
+        "--text=" .. message, "--entry-text=" .. default}
+      local function kdialog()
+        return process:run_async({"kdialog", "--inputbox", message, default,
+          "--title", title}, nil, handle_result(callback))
+      end
+      return process:run_async(zenity, nil, handle_result(callback, kdialog))
     end
-    if runtime.is_macos then
-      local script = table.concat({
-        "on run argv",
-        "return text returned of (display dialog (item 1 of argv) " ..
-          "default answer (item 3 of argv) with title (item 2 of argv))",
-        "end run"
-      }, "\n")
-      return process:run_async(
-        {"osascript", "-e", script, "--", message, title, default}, nil,
-        handle_result(callback))
+
+    if options.prefill_clipboard_link then
+      return read_clipboard(function(value)
+        local link = clipboard_link(value)
+        show(link ~= "" and link or fallback_default)
+      end)
     end
-    local zenity = {"zenity", "--entry", "--title=" .. title,
-      "--text=" .. message, "--entry-text=" .. default}
-    local function kdialog()
-      return process:run_async({"kdialog", "--inputbox", message, default,
-        "--title", title}, nil, handle_result(callback))
-    end
-    return process:run_async(zenity, nil, handle_result(callback, kdialog))
+    return show(fallback_default)
   end
 
   return service

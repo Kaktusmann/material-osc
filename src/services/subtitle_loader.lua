@@ -67,7 +67,8 @@ function subtitle_loader.new(args)
     local title = secondary and "Add secondary subtitle link" or "Add subtitle link"
     dialogs:prompt_text({
       title = title,
-      message = "Enter a subtitle URL:"
+      message = "Enter a subtitle URL:",
+      prefill_clipboard_link = true
     }, function(output) attach_link(output, secondary) end)
   end
 

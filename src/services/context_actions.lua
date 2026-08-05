@@ -1,9 +1,11 @@
 local context_actions = {}
 local config_schema = require "src.config.schema"
+local windows_command = require "src.platform.windows_command"
 
 function context_actions.new(args)
   local mp = args.mp
   local filesystem, http = args.filesystem, args.http
+  local process, runtime = args.process, args.runtime
   local properties = args.properties
   local service = {}
 
@@ -35,13 +37,59 @@ function context_actions.new(args)
   end
 
   local function copy(value, message)
-    if not value or value == "" then return end
-    local ok, result = pcall(mp.set_property, "clipboard", value)
-    if ok and result ~= false then
+    value = tostring(value or "")
+    if value == "" then return end
+
+    local called, native_ok = pcall(mp.set_property, "clipboard/text", value)
+    if called and native_ok == true then
       args.toast:success(message, {icon = "content_copy", duration = 2})
-    else
-      args.toast:error("Clipboard is unavailable", {duration = 2})
+      return
     end
+
+    if not process or not runtime then
+      args.toast:error("Clipboard is unavailable", {duration = 2})
+      return
+    end
+
+    local commands
+    if runtime.is_windows then
+      commands = {{
+        command = windows_command.powershell(
+          "Set-Clipboard -Value $argument1", {value})
+      }}
+    elseif runtime.is_macos then
+      commands = {{command = {"pbcopy"}, stdin_data = value}}
+    else
+      commands = {
+        {command = {"wl-copy", "--", value}},
+        {command = {"xclip", "-selection", "clipboard", "-in"},
+          stdin_data = value},
+        {command = {"xsel", "--clipboard", "--input"},
+          stdin_data = value}
+      }
+    end
+
+    local index = 0
+    local function try_next()
+      index = index + 1
+      local candidate = commands[index]
+      if not candidate then
+        args.toast:error("Clipboard is unavailable", {duration = 2})
+        return
+      end
+      process:run_async(candidate.command, {
+        stdin_data = candidate.stdin_data,
+        capture_stdout = false,
+        capture_stderr = true
+      }, function(ok)
+        if ok then
+          args.toast:success(message, {icon = "content_copy", duration = 2})
+        else
+          try_next()
+        end
+      end)
+    end
+    try_next()
   end
 
   local function launch(target, reveal)

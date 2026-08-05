@@ -5,6 +5,7 @@ function animation_coordinator.new(args)
   local service = {}
   local animations = {
     runtime.controller.opacity,
+    runtime.window_controls.opacity,
     runtime.volume.animation,
     runtime.context_menu.animation,
     runtime.context_menu.width_animation,
@@ -83,9 +84,18 @@ function animation_coordinator.new(args)
       runtime.controller.opacity:is_running() then
       return "visual"
     end
+    if runtime.window_controls.opacity:is_running() then
+      return "interaction"
+    end
     if runtime.context_menu.animation:is_running() or
       runtime.context_menu.width_animation:is_running() or
       runtime.context_menu.height_animation:is_running() then
+      return "interaction"
+    end
+    if runtime.tooltip.requested or
+      runtime.tooltip.opacity.value > 0.001 or
+      runtime.tooltip.opacity:is_running() or
+      runtime.tooltip.slide:is_running() then
       return "interaction"
     end
     if args.empty_state_visible and args.empty_state_visible() then
@@ -155,6 +165,15 @@ function animation_coordinator.new(args)
 
   function service:update(now)
     runtime.controller.opacity:update(now)
+    local follows_controller = args.show_window_controls_with_controller and
+      args.show_window_controls_with_controller()
+    local window_controls_visible = runtime.window_controls.hovered or
+      (follows_controller and runtime.controller.visible)
+    runtime.window_controls.visible = window_controls_visible
+    runtime.window_controls.opacity:set_target(
+      window_controls_visible and 1 or 0, now,
+      window_controls_visible and 0.12 or 0.18)
+    runtime.window_controls.opacity:update(now)
     local context_visible = runtime.context_menu.open or
       runtime.context_menu.pending_x ~= nil or
       runtime.context_menu.animation:is_running() or

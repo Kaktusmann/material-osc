@@ -19,7 +19,9 @@ function application_state.new(args)
       hide_cursor_after_fade = false,
       bounds = nil
     },
-    window_controls = {bounds = nil, reveal_bounds = nil},
+    window_controls = {
+      bounds = nil, reveal_bounds = nil, hovered = false, visible = false
+    },
     pip = {active = false, restore = nil, bounds = nil, raise_timer = nil},
     pointer = {
       x = -1, y = -1, active = nil,
@@ -126,6 +128,9 @@ function application_state.new(args)
 
   runtime.controller.opacity = animation.tween({
     initial = opts.show_on_mouse_move and 1 or 0, duration = 0.18
+  })
+  runtime.window_controls.opacity = animation.tween({
+    initial = 0, duration = 0.16
   })
   runtime.context_menu.animation = animation.tween({
     initial = 0, duration = POPUP_FADE_DURATION

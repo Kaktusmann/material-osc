@@ -34,7 +34,7 @@ function controls.new(services)
   local ConnectedPill = ui.ConnectedPill
   local is_render_pass = ui.is_render_pass
 
-  local function set_pip_enabled(enabled)
+  local function set_pip_enabled(enabled, requested_window_state)
     timers:cancel(state.pip, "raise_timer")
     if enabled then
       state.pip.restore = {
@@ -55,12 +55,18 @@ function controls.new(services)
       local restore = state.pip.restore or {}
       state.pip.active, state.pip.restore, state.pip.bounds = false, nil, nil
       mp.set_property_bool("fullscreen", false)
-      mp.set_property_bool("window-maximized", false)
+      if requested_window_state ~= "maximized" then
+        mp.set_property_bool("window-maximized", false)
+      end
       mp.set_property("geometry", "50%:50%")
       if restore.scale then
         mp.set_property_number("current-window-scale", restore.scale)
       end
-      if restore.maximized then
+      if requested_window_state == "maximized" then
+        mp.set_property_bool("window-maximized", true)
+      elseif requested_window_state == "fullscreen" then
+        mp.set_property_bool("fullscreen", true)
+      elseif restore.maximized then
         mp.set_property_bool("window-maximized", true)
       elseif restore.fullscreen then
         mp.set_property_bool("fullscreen", true)
@@ -76,6 +82,14 @@ function controls.new(services)
       end
     end
     render_all()
+  end
+
+  services.pip = services.pip or {}
+  services.pip.set_enabled = set_pip_enabled
+  services.pip.exit_for_window_state = function(window_state)
+    if not state.pip.active then return false end
+    set_pip_enabled(false, window_state)
+    return true
   end
 
   local function VolumeSlider()
@@ -746,7 +760,7 @@ function controls.new(services)
 
     node.cached_time = TextItem({
       text = "0:00",
-      color = "#3C4043",
+      color = "#000000",
       render_pass = "dynamic",
       tooltip = "Cached Time",
       modifier = Modifier():padding({
@@ -956,20 +970,31 @@ function controls.new(services)
     }
     node.minimize = IconButton({
       name = "window-minimize-button", icon = "minimize", size = 22,
+      render_pass = "interaction", ignore_controller_fade = true,
+      tooltip_allow_when_suppressed = true,
       horizontal_padding = 6, tooltip = "Minimize",
       on_click = function() mp.set_property_bool("window-minimized", true) end
     })
     node.maximize = IconButton({
       name = "window-maximize-button", icon = "crop_square", size = 22,
+      render_pass = "interaction", ignore_controller_fade = true,
+      tooltip_allow_when_suppressed = true,
       icon_size = 18, horizontal_padding = 6,
       tooltip = "Maximize",
       on_click = function()
-        if node.fullscreen then mp.set_property_bool("fullscreen", false)
-        else mp.commandv("cycle", "window-maximized") end
+        if state.pip.active then
+          set_pip_enabled(false)
+        elseif node.fullscreen then
+          mp.set_property_bool("fullscreen", false)
+        else
+          mp.commandv("cycle", "window-maximized")
+        end
       end
     })
     node.close = IconButton({
       name = "window-close-button", icon = "close", size = 22,
+      render_pass = "interaction", ignore_controller_fade = true,
+      tooltip_allow_when_suppressed = true,
       horizontal_padding = 6, hover_icon_color = "#000000", tooltip = "Close",
       on_click = function() mp.commandv("quit") end
     })
@@ -979,6 +1004,28 @@ function controls.new(services)
       gap = 0,
       children = {node.minimize, node.maximize, node.close}
     })
+    node.pill.modifier.render_pass = "interaction"
+    node.pill.modifier.ignore_controller_fade = true
+    node.pill_base_alpha = node.pill.modifier.background_alpha or "58"
+    node.buttons = {node.minimize, node.maximize, node.close}
+    for _, button in ipairs(node.buttons) do
+      button.window_hover_alpha = button.modifier.hover_alpha
+    end
+
+    local function faded_alpha(base_alpha, opacity)
+      local base = tonumber(base_alpha or "00", 16) or 0
+      local base_opacity = 1 - base / 255
+      return ass_alpha_for_opacity(base_opacity * opacity)
+    end
+
+    function node:set_interactive(interactive)
+      interactive = interactive == true
+      for _, button in ipairs(self.buttons) do
+        button.modifier.pointer_enabled = interactive
+        local hitbox = state.input.hitboxes[button.modifier.pointer_name]
+        if hitbox then hitbox.enabled = interactive end
+      end
+    end
 
     function node:update(snapshot)
       self.fullscreen = snapshot.fullscreen
@@ -995,6 +1042,15 @@ function controls.new(services)
     end
 
     function node:draw(ass, bounds)
+      local opacity = clamp(state.window_controls.opacity.value, 0, 1)
+      local icon_alpha = ass_alpha_for_opacity(opacity)
+      self.pill.modifier.background_alpha =
+        faded_alpha(self.pill_base_alpha, opacity)
+      for _, button in ipairs(self.buttons) do
+        button.alpha = icon_alpha
+        button.modifier.hover_alpha =
+          faded_alpha(button.window_hover_alpha, opacity)
+      end
       draw_node(self.pill, ass, content_bounds(bounds, self.modifier))
     end
 
@@ -1033,22 +1089,24 @@ function controls.new(services)
       local opacity = tooltip_state.opacity.value
       if visual and opacity > 0 then
         local alpha = ass_alpha_for_opacity(opacity)
+        local ignore_controller_fade = visual.allow_when_suppressed == true
         local slide_distance = dp(tooltip_slide_distance) * (1 - tooltip_state.slide.value)
         local slide_y = visual.slide_direction_y * slide_distance
         local y1 = visual.y1 + slide_y
         draw_box(ass, visual.x1, y1, visual.x2, y1 + visual.h,
-             visual.h / 2, "#E8E8E8", alpha)
+             visual.h / 2, "#E8E8E8", alpha, ignore_controller_fade)
         draw_text(ass, visual.text_x or (visual.x1 + visual.w / 2),
               y1 + visual.h / 2,
               visual.text, visual.text_size, "#202020", alpha,
-              default_text_font)
+              default_text_font, nil, nil, ignore_controller_fade)
         for _, keycap in ipairs(visual.keycaps or {}) do
           local cap_y1, cap_y2 = y1 + dp(4), y1 + visual.h - dp(4)
           draw_box(ass, keycap.x1, cap_y1, keycap.x1 + keycap.w, cap_y2,
-            dp(5), "#C8C8C8", alpha)
+            dp(5), "#C8C8C8", alpha, ignore_controller_fade)
           draw_text(ass, keycap.x1 + keycap.w / 2,
             y1 + visual.h / 2, keycap.label, visual.key_size,
-            "#202020", alpha, default_text_font)
+            "#202020", alpha, default_text_font,
+            nil, nil, ignore_controller_fade)
         end
       end
     end

@@ -54,6 +54,7 @@ local definitions = {
     normalize = number({default = 2, min = 0.01})},
   {name = "show_remaining_time", default = false, group = "behavior"},
   {name = "adjust_time_with_speed", default = true, group = "behavior"},
+  {name = "adjust_subtitle_position", default = true, group = "behavior"},
   {name = "max_volume_percentage", default = 150, group = "behavior",
     normalize = number({default = 150, min = 100})},
   {name = "skip_intro_outro_chapters", default = "ask", group = "behavior",

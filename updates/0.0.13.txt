@@ -1,0 +1,7 @@
+- Window controls now reveal independently from the playback controller when the pointer enters the top 64dp of the window. The bottom edge continues to reveal playback controls, while `show_on_mouse_move=yes` shows both interfaces together.
+- Added independent window-control fade animations, working hitboxes, and tooltips across normal playback and the empty screen. Window controls no longer inherit the playback controller's hidden opacity.
+- Improved Picture-in-Picture window transitions. The OSC maximize control exits PiP normally, while using the native maximize action exits PiP and keeps the window maximized.
+- Fixed clipboard actions on current mpv versions by writing to `clipboard/text`, with Wayland, X11, macOS, and Windows command fallbacks when native clipboard support is unavailable.
+- Media, subtitle, and shader URL prompts now prefill valid links from the clipboard when possible.
+- Added `adjust_subtitle_position` for disabling automatic movement of bottom-aligned subtitles above the OSC and preserving mpv's configured subtitle position.
+- Improved pointer behavior around the volume popup and top controls, including correct `mouse_timeout=0` cursor handling and reliable tooltip animation in the empty state.

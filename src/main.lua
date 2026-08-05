@@ -348,21 +348,22 @@ local function create_app(services)
       local controls_size = ui.measure_node(self.window_controls, root)
       ui.draw_node(self.window_drag_area, ass, root)
       state.window_controls.reveal_bounds = ui.Rect({
-        x = root.x, y = root.y, w = root.w, h = controls_size.h
+        x = root.x,
+        y = root.y,
+        w = root.w,
+        h = math.max(controls_size.h, ui.edge_seek_top_inset())
       })
-      if state.controller.opacity.value > 0 then
-        state.window_controls.bounds =
-          ui.draw_node(self.window_controls, ass, root)
-      else
-        state.window_controls.bounds = ui.Rect({
-          x = root.x2 - controls_size.w,
-          y = root.y,
-          w = controls_size.w,
-          h = controls_size.h
-        })
-      end
+      -- Measure and register button hitboxes in the retained base pass, but
+      -- render the buttons only in the interaction overlay while revealed.
+      state.window_controls.bounds = ui.draw_node(
+        self.window_controls, assdraw.ass_new(), root)
+      self.window_controls:set_interactive(state.window_controls.visible)
     else
       state.window_controls.bounds, state.window_controls.reveal_bounds = nil, nil
+      state.window_controls.hovered = false
+      state.window_controls.visible = false
+      state.window_controls.opacity:snap(0)
+      self.window_controls:set_interactive(false)
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
   end
@@ -387,14 +388,23 @@ local function create_app(services)
       end
     end
     local pointer_x, pointer_y = state.pointer.x, state.pointer.y
-    if modal_is_open() then state.pointer.x, state.pointer.y = -1, -1 end
+    local volume_owns_pointer = state.volume.popup_bounds and
+      ui.mouse_in(state.volume.popup_bounds)
+    local modal_open = modal_is_open()
+    if modal_open or volume_owns_pointer then
+      state.pointer.x, state.pointer.y = -1, -1
+    end
     if not state.pip.active and state.controller.opacity.value > 0 then
       if self.youtube_actions.bounds then
         self.youtube_actions:draw(ass, self.youtube_actions.bounds)
       end
       -- Keep seek hover previews above inline SponsorBlock actions when their
-      -- bounds overlap.
+      -- bounds overlap, but do not let the seekbar react through the volume
+      -- popup.
       if self.seekbar.bounds then self.seekbar:draw(ass, self.seekbar.bounds) end
+      if volume_owns_pointer and not modal_open then
+        state.pointer.x, state.pointer.y = pointer_x, pointer_y
+      end
       self.controls:draw_dynamic(ass)
     elseif not state.pip.active then
       local bounds = self:persistent_action_bounds(root)
@@ -412,6 +422,9 @@ local function create_app(services)
     -- popup starts closing, immediately hand hover back to the controls below
     -- it and keep it there throughout the spring tail.
     local modal_open = modal_is_open()
+    local window_controls_visible =
+      state.window_controls.opacity.value > 0.001 or
+      state.window_controls.opacity:is_running()
     if modal_open or volume_owns_pointer then
       state.pointer.x, state.pointer.y = -1, -1
     end
@@ -423,7 +436,8 @@ local function create_app(services)
       local bounds = self:persistent_action_bounds(root)
       if bounds then ui.draw_node(self.youtube_actions, ass, bounds) end
     end
-    if state.window_controls.bounds and state.controller.opacity.value > 0 then
+    if state.window_controls.bounds and window_controls_visible and
+      not modal_open then
       ui.draw_node(self.window_controls, ass, root)
     end
     state.pointer.x, state.pointer.y = pointer_x, pointer_y
@@ -555,7 +569,8 @@ local runtime = application_state.new({
 })
 local subtitle_position = subtitle_position_module.new({
   mp = mp,
-  animation = animation
+  animation = animation,
+  enabled = opts.adjust_subtitle_position
 })
 
 local thumbnail_service
@@ -736,6 +751,7 @@ local context_actions = context_actions_module.new({
   mp = mp, format_time = format_time,
   bookmarks = bookmark_service, opts = opts, properties = runtime.properties,
   filesystem = filesystem, http = http,
+  process = process, runtime = platform_runtime,
   toast = toast_service,
   render = function(...) return render(...) end
 })
@@ -987,9 +1003,15 @@ local snapshot_reader = snapshot_module.cached_reader({
 })
 local function read_player_snapshot() return snapshot_reader:read() end
 local runtime_host
+local function cursor_never_hides()
+  return math.max(0, tonumber(opts.mouse_timeout) or 0) <= 0
+end
 local animation_coordinator = animation_coordinator_module.new({
   runtime = runtime, mouse_in = mouse_in, tooltip = tooltip_service,
   empty_state_visible = function() return app.empty_visible end,
+  show_window_controls_with_controller = function()
+    return opts.show_on_mouse_move
+  end,
   single_click_actions_enabled = function()
     return opts.single_click_actions_enabled
   end,
@@ -997,7 +1019,9 @@ local animation_coordinator = animation_coordinator_module.new({
     return opts.seeking_zone_percentage / 100
   end,
   edge_seek_top_inset = edge_seek_top_inset,
-  hide_cursor = function() runtime_host:set_cursor_autohide("always") end,
+  hide_cursor = function()
+    runtime_host:set_cursor_autohide(cursor_never_hides() and "no" or "always")
+  end,
   needs_display_rate = function()
     return subtitle_position:is_running() or runtime.snapshot.buffering or
       runtime.ytdl.caption_loading_id ~= nil or brand_logo:is_animating()
@@ -1034,10 +1058,17 @@ runtime_host = mpv_runtime_module.new({
   update_cached_property = function(name, value)
     snapshot_reader:update(name, value)
   end,
-  property_changed = performance and function(name)
-    local key = "property_" .. name
-    performance[key] = (performance[key] or 0) + 1
-  end or nil,
+  property_changed = function(name, value)
+    if performance then
+      local key = "property_" .. name
+      performance[key] = (performance[key] or 0) + 1
+    end
+    if name == "window-maximized" and value == true and
+      runtime.pip.active and services.pip and
+      services.pip.exit_for_window_state then
+      services.pip.exit_for_window_state("maximized")
+    end
+  end,
   needs_continuous_render = function()
     local animation_running = animation_coordinator:is_running()
     local tooltip_running = tooltip_service:needs_frames(mp.get_time())
@@ -1141,7 +1172,8 @@ local renderer = frame_runtime.renderer.new({
       controller_bounds and controller_bounds.h or 0,
       runtime.controller.opacity.target,
       runtime.viewport.h,
-      mp.get_time())
+      mp.get_time(),
+      opts.adjust_subtitle_position)
   end,
   on_frame = performance and function(mode)
     if mode == "full" then
@@ -1184,6 +1216,12 @@ controller = controller_module.new({
   tooltip_hover_changed = function()
     tooltip_service:reset_hover()
   end,
+  window_controls_hover_changed = function(hovered)
+    if app and app.window_controls then
+      app.window_controls:set_interactive(
+        hovered or (opts.show_on_mouse_move and runtime.controller.visible))
+    end
+  end,
   -- At 240 Hz, redrawing a pixel-sensitive seek preview on every hardware
   -- mouse sample costs more than the rest of the visible OSC. A 120 Hz cap
   -- still gives an 8.3 ms response while popup springs remain display-paced.
@@ -1206,6 +1244,9 @@ options_update_handler = function(changed)
   end
   if changed.show_remaining_time or changed.adjust_time_with_speed then
     runtime.frame.progress_second = nil
+  end
+  if changed.adjust_subtitle_position then
+    subtitle_position:set_enabled(opts.adjust_subtitle_position)
   end
   if changed.show_empty_screen then
     app:update_video_presence(runtime.snapshot)
@@ -1242,8 +1283,10 @@ options_update_handler = function(changed)
   if changed.show_on_mouse_move then
     if opts.show_on_mouse_move then controller:show()
     else controller:sync_visibility_with_pointer() end
-  elseif changed.mouse_timeout and runtime.controller.visible then
-    controller:show()
+  end
+  if changed.mouse_timeout then
+    if cursor_never_hides() then runtime_host:set_cursor_autohide("no") end
+    if runtime.controller.visible then controller:show() end
   end
   render()
 end
@@ -1316,6 +1359,7 @@ if performance then
 end
 
 runtime_host:start()
+if cursor_never_hides() then runtime_host:set_cursor_autohide("no") end
 if opts.show_on_mouse_move then controller:show() end
 config_watcher:start()
 updater:start()
