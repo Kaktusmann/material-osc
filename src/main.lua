@@ -28,13 +28,19 @@ local configured_video_sync =
 local configured_force_window =
   mp.get_property("force-window", "no") or "no"
 local configured_geometry = mp.get_property("geometry", "") or ""
+local function should_force(setting, is_unconfigured)
+  return setting == "yes" or (setting == "auto" and is_unconfigured)
+end
 local function apply_forced_mpv_options()
   mp.set_property("hwdec", opts.force_hwdec and "auto" or configured_hwdec)
-  mp.set_property("video-sync", opts.force_display_resample and
+  mp.set_property("video-sync",
+    should_force(opts.force_display_resample, configured_video_sync == "audio") and
     "display-resample" or configured_video_sync)
-  mp.set_property("force-window", opts.force_force_window and
+  mp.set_property("force-window",
+    should_force(opts.force_force_window, configured_force_window == "no") and
     "yes" or configured_force_window)
-  mp.set_property("geometry", opts.force_geometry and
+  mp.set_property("geometry",
+    should_force(opts.force_geometry, configured_geometry == "") and
     "x66%" or configured_geometry)
 end
 apply_forced_mpv_options()
