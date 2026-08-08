@@ -58,6 +58,7 @@ height, with width calculated from the video's aspect ratio; see
 | `single_click_actions_enabled` | `yes` | `yes`, `no` | Enables single-click play/pause and left/right edge seeking. Double-click fullscreen remains available when disabled. |
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
+| `live_edge_offset_seconds` | `2` | Non-negative seconds or `-1` | After a live stream resumes from pausing or buffering, seeks this far behind the live edge. Set to `-1` to disable automatic catch-up. |
 | `temporary_speed` | `2` | Playback rate greater than `0` | Sets the speed used while the `hold-double-speed` binding is held. |
 | `show_remaining_time` | `no` | `yes`, `no` | Shows remaining time instead of elapsed time by default. The time display remains clickable to toggle modes. |
 | `adjust_time_with_speed` | `yes` | `yes`, `no` | Adjusts elapsed, remaining, and total displayed time for the current playback speed. |

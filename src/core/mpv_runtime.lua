@@ -201,6 +201,7 @@ function mpv_runtime.new(args)
       local name = property[1]
       mp.observe_property(name, property[2], function(_, value)
         state.properties[name] = value
+        if args.live_edge then args.live_edge:on_property_changed(name, value) end
         if args.property_changed then args.property_changed(name, value) end
         args.render()
       end)
@@ -378,12 +379,14 @@ function mpv_runtime.new(args)
       controller():animate_visibility(not state.controller.visible)
     end)
     mp.register_event("playback-restart", function()
+      if args.live_edge then args.live_edge:on_playback_restart() end
       if not state.loading.quality_switching then return end
       state.loading.quality_switching = false
       args.render()
     end)
     mp.register_event("start-file", function()
       state.media.loading = true
+      if args.live_edge then args.live_edge:reset() end
       if args.sponsorblock then args.sponsorblock:reset() end
       args.render()
     end)

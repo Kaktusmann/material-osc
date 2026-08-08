@@ -71,7 +71,8 @@ function ytdl_service.new(args)
       visible = mp.get_property_native("sub-visibility") ~= false
     }
     local load_options = {
-      start = tostring(position), pause = paused and "yes" or "no"
+      start = tostring(position), pause = paused and "yes" or "no",
+      vid = "auto"
     }
     if not item.playback_url then
       load_options["ytdl-format"] = item.selector
@@ -123,7 +124,7 @@ function ytdl_service.new(args)
       return
     end
     if not ytdl_service.supports(path) then
-      state.active, state.source, state.url = false, nil, nil
+      state.active, state.source, state.url, state.is_live = false, nil, nil, nil
       state.items, state.caption_items = {}, {}
       state.selected_id, state.pending_selected_id = nil, nil
       state.pending_playback_url = nil
@@ -136,7 +137,7 @@ function ytdl_service.new(args)
     end
     state.request_id = state.request_id + 1
     local request_id = state.request_id
-    state.items, state.caption_items, state.selected_id = {}, {}, nil
+    state.items, state.caption_items, state.selected_id, state.is_live = {}, {}, nil, nil
     state.active, state.source, state.url = true, "youtube", path
     local command = {"yt-dlp", "--dump-single-json", "--no-playlist", "--no-warnings", path}
     append_raw_options(command)
@@ -144,6 +145,7 @@ function ytdl_service.new(args)
         if request_id ~= state.request_id or not success then return end
         local data = args.utils.parse_json(result.stdout or "")
         if not data or type(data.formats) ~= "table" then return end
+        state.is_live = data.is_live == true or data.live_status == "is_live"
         local best = {}
         for _, format in ipairs(data.formats) do
           local height, width, fps = tonumber(format.height),

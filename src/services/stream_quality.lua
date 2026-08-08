@@ -69,7 +69,7 @@ function hls_module.new(args)
 
     state.request_id = state.request_id + 1
     local request_id = state.request_id
-    state.active, state.source, state.url = true, "hls", path
+    state.active, state.source, state.url, state.is_live = true, "hls", path, nil
     state.items, state.caption_items = {}, {}
     state.selected_id, state.pending_selected_id = nil, nil
     http:get(path, {fail = true}, function(success, response)

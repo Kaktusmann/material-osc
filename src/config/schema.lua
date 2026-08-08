@@ -50,6 +50,11 @@ local definitions = {
   {name = "seeking_zone_percentage", default = 15, group = "behavior",
     normalize = number({default = 15, min = 0, max = 50})},
   {name = "seek_step_seconds", default = 5, group = "behavior"},
+  {name = "live_edge_offset_seconds", default = 2, group = "behavior",
+    normalize = function(value)
+      value = tonumber(value) or 2
+      return value < 0 and -1 or value
+    end},
   {name = "temporary_speed", default = 2, group = "behavior",
     normalize = number({default = 2, min = 0.01})},
   {name = "show_remaining_time", default = false, group = "behavior"},

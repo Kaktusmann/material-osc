@@ -91,6 +91,7 @@ local keybinding_hints_module = require "src.services.keybinding_hints"
 local toast_service_module = require "src.services.toast"
 local temporary_speed_module = require "src.services.temporary_speed"
 local subtitle_position_module = require "src.services.subtitle_position"
+local live_edge_module = require "src.services.live_edge"
 local update_service_module = require "src.services.update_service"
 local filesystem_module = require "src.platform.filesystem"
 local http_module = require "src.platform.http"
@@ -576,6 +577,11 @@ local runtime = application_state.new({
   animation = animation,
   now_ms = function() return mp.get_time() * 1000 end
 })
+local live_edge = live_edge_module.new({
+  mp = mp,
+  offset = function() return opts.live_edge_offset_seconds end,
+  known_live = function() return runtime.ytdl.is_live == true end
+})
 local subtitle_position = subtitle_position_module.new({
   mp = mp,
   animation = animation,
@@ -1048,6 +1054,7 @@ runtime_host = mpv_runtime_module.new({
   context_menu_enabled = function() return opts.context_menu end,
   menu_keyboard = menu_keyboard,
   playback_indicator = playback_indicator,
+  live_edge = live_edge,
   stream_quality = stream_quality,
   sponsorblock = sponsorblock_service,
   directory_playlist = directory_playlist,

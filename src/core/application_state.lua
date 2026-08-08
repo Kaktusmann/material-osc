@@ -92,6 +92,7 @@ function application_state.new(args)
     },
     ytdl = {
       active = false, source = nil, url = nil, items = {}, caption_items = {},
+      is_live = nil,
       request_id = 0, selected_id = nil, pending_selected_id = nil,
       pending_playback_url = nil,
       caption_loading_id = nil, caption_request_id = 0,
