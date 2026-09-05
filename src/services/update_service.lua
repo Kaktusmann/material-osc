@@ -1,7 +1,7 @@
 local update_service = {}
 
 local CURRENT_VERSION = "__MATERIAL_OSC_VERSION__"
-local REPOSITORY = "brahmkshatriya/material-osc"
+local REPOSITORY = "Kaktusmann/material-osc"
 local API_URL = "https://api.github.com/repos/" .. REPOSITORY .. "/releases/latest"
 local CHECK_INTERVAL_SECONDS = 2 * 60 * 60
 

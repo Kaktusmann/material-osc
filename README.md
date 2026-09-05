@@ -4,6 +4,10 @@
 
 # material-osc
 
+> **Note:** This is a community-maintained fork. The original repository,
+> [brahmkshatriya/material-osc](https://github.com/brahmkshatriya/material-osc),
+> has been inactive, so development continues here.
+
 A quality-of-life upgrade for mpv that keeps the player lightweight while
 making everyday controls easier to reach and nicer to use. material-osc brings
 a polished Material-style interface, smooth animated feedback, automatic
