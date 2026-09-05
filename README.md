@@ -4,7 +4,7 @@
 
 # material-osc
 
-> **Note:** This is a community-maintained fork. The original repository,
+> **Note:** This is a self-maintained fork. The original repository,
 > [brahmkshatriya/material-osc](https://github.com/brahmkshatriya/material-osc),
 > has been inactive, so development continues here.
 
