@@ -1,0 +1,4 @@
+- First release of this fork. Repoints the auto-updater and SponsorBlock user-agent to Kaktusmann/material-osc; the original repository (brahmkshatriya/material-osc) has gone inactive.
+- Added a persistent, transparent pause indicator that stays centered on the video while playback is paused (`pause_indicator`).
+- Added `volume_slider_orientation` to expand the volume slider horizontally alongside the volume button instead of upward from it.
+- Fixed the volume indicator flashing during rapid volume changes.
