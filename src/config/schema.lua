@@ -38,6 +38,7 @@ local definitions = {
   {name = "context_menu", default = true, group = "appearance"},
   {name = "tooltip", default = true, group = "appearance"},
   {name = "show_mini_seekbar", default = false, group = "appearance"},
+  {name = "pause_indicator", default = true, group = "appearance"},
   {name = "show_empty_screen", default = true, group = "appearance"},
   {name = "screenshot_button", default = true, group = "appearance"},
   {name = "pip_button", default = true, group = "appearance"},
