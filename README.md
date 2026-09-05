@@ -35,6 +35,7 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
 | `pause_indicator` | `yes` | `yes`, `no` | Keeps a faint, transparent pause icon centered on the video for as long as playback stays paused. |
+| `volume_slider_orientation` | `vertical` | `vertical`, `horizontal` | Expands the volume slider upward from the volume button, or rightward alongside it (pushing later controls out of the way). |
 | `show_empty_screen` | `yes` | `yes`, `no` | Shows the material-osc welcome screen when the playlist is empty. Set to `no` to leave the empty player unobstructed. |
 | `screenshot_button` | `yes` | `yes`, `no` | Shows or hides the screenshot button in the playback controls. |
 | `pip_button` | `yes` | `yes`, `no` | Shows or hides the Picture-in-Picture button in the playback controls. |
