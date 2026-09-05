@@ -20,7 +20,7 @@ function edge_seek.new(services)
   local function register_hitbox(side, bounds, amount)
     local name = "edge-seek-" .. side
     bounds.name = name
-    bounds.enabled = opts.single_click_actions_enabled and not modal_open()
+    bounds.enabled = opts.single_click_seek_enabled and not modal_open()
     bounds.on_click = function()
       mp.commandv("seek", tostring(amount), "relative")
       local visual = state.edge_seek[side]

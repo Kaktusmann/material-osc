@@ -1045,8 +1045,8 @@ local animation_coordinator = animation_coordinator_module.new({
   show_window_controls_with_controller = function()
     return opts.show_on_mouse_move
   end,
-  single_click_actions_enabled = function()
-    return opts.single_click_actions_enabled
+  single_click_seek_enabled = function()
+    return opts.single_click_seek_enabled
   end,
   seeking_zone_fraction = function()
     return opts.seeking_zone_percentage / 100
@@ -1313,9 +1313,9 @@ options_update_handler = function(changed)
     changed.skip_outro_detection_texts then
     sponsorblock_service:on_options_changed(changed)
   end
-  if changed.dpi_scale or changed.single_click_actions_enabled or
-    changed.seeking_zone_percentage or changed.seek_step_seconds or
-    changed.max_volume_percentage then
+  if changed.dpi_scale or changed.single_click_pause_enabled or
+    changed.single_click_seek_enabled or changed.seeking_zone_percentage or
+    changed.seek_step_seconds or changed.max_volume_percentage then
     recreate_app()
   end
   if changed.show_on_mouse_move then

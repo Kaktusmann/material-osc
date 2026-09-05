@@ -713,7 +713,7 @@ function controls.new(services)
     local node = {modifier = Modifier():fillMaxWidth():fillMaxHeight()}
     node.modifier:pointerArea({
       name = "video-surface",
-      on_click = config.opts.single_click_actions_enabled and
+      on_click = config.opts.single_click_pause_enabled and
         function() mp.commandv("cycle", "pause") end or nil,
       on_double = function() mp.commandv("cycle", "fullscreen") end
     })
