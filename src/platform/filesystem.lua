@@ -171,7 +171,9 @@ function filesystem.new(args)
     if runtime.is_windows then path = self:normalize(path) end
     local command
     if runtime.is_windows then
-      command = options.reveal and {"explorer", "/select," .. path} or
+      command = options.reveal and windows_command.powershell(
+          "Start-Process -FilePath explorer.exe " ..
+            "-ArgumentList \"/select,`\"$argument1`\"\"", {path}) or
         windows_command.powershell(
           "Start-Process -FilePath $argument1", {path})
     elseif runtime.is_macos then
