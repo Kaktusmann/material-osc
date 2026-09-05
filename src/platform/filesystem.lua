@@ -130,9 +130,12 @@ function filesystem.new(args)
   end
 
   function service:temporary_base()
-    local path = os.tmpname()
-    self:remove(path)
-    return path
+    -- os.tmpname() places files at the current drive's root on Windows,
+    -- which is often not writable. Use mpv's own cache directory instead.
+    local directory = mp.command_native(
+      {"expand-path", "~~/cache/material-osc/updates"})
+    self:ensure_directory(directory)
+    return self:join(directory, "update-" .. tostring(os.time()))
   end
 
   function service:extract_archive(archive, directory, callback)

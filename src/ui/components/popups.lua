@@ -20,6 +20,7 @@ function popups.new(services)
   local opts, msg = services.config.opts, services.platform.msg
   local filesystem = services.platform.filesystem
   local process = services.platform.process
+  local runtime = services.platform.runtime
   local timers = services.timers
   local dp, clamp, smooth_step = ui.dp, ui.clamp, ui.smooth_step
   local ass_alpha_for_opacity = ui.alpha
@@ -558,16 +559,22 @@ end
         mp.get_property("working-directory") or ".", source)
     end
 
-    -- Sandboxed image viewers (Flatpak/Snap in particular) have a private /tmp,
-    -- so a host-side /tmp path can disappear from the viewer's point of view.
-    -- The user's cache directory is visible through the desktop file portal.
-    local temp_dir = os.getenv("XDG_CACHE_HOME")
-    if not temp_dir or temp_dir == "" then
-      local home = os.getenv("HOME") or mp.get_property("working-directory") or "."
-      temp_dir = filesystem:join(home, ".cache")
+    local temp_dir
+    if runtime.is_windows then
+      temp_dir = mp.command_native({"expand-path", "~~/cache/material-osc"})
+    else
+      -- Sandboxed image viewers (Flatpak/Snap in particular) have a private
+      -- /tmp, so a host-side /tmp path can disappear from the viewer's point
+      -- of view. The user's cache directory is visible through the desktop
+      -- file portal.
+      temp_dir = os.getenv("XDG_CACHE_HOME")
+      if not temp_dir or temp_dir == "" then
+        local home = os.getenv("HOME") or mp.get_property("working-directory") or "."
+        temp_dir = filesystem:join(home, ".cache")
+      end
+      temp_dir = filesystem:join(temp_dir, "mpv")
+      temp_dir = filesystem:join(temp_dir, "material-osc")
     end
-    temp_dir = filesystem:join(temp_dir, "mpv")
-    temp_dir = filesystem:join(temp_dir, "material-osc")
     temp_dir = filesystem:join(temp_dir, "thumbnails")
     if not filesystem:ensure_directory(temp_dir) then
       msg.error("Could not create image thumbnail directory: " .. temp_dir)

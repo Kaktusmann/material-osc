@@ -88,7 +88,6 @@ function dialogs.new(args)
       filter_values(options.filters)
     if runtime.is_windows then
       local script = table.concat({
-        "[Console]::OutputEncoding=[Text.Encoding]::UTF8;",
         "Add-Type -AssemblyName System.Windows.Forms;",
         "$dialog=New-Object System.Windows.Forms.OpenFileDialog;",
         "$dialog.Title=$argument1;",

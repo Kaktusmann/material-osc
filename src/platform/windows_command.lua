@@ -6,6 +6,10 @@ end
 
 function windows_command.powershell(script, arguments)
   arguments = arguments or {}
+  -- Windows PowerShell defaults console output to the legacy ANSI/OEM
+  -- codepage, which mangles non-ASCII text captured as subprocess stdout.
+  local preamble = "$ErrorActionPreference='Stop'; " ..
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
   if #arguments > 0 then
     local parameters, values = {}, {}
     for index, value in ipairs(arguments) do
@@ -13,10 +17,10 @@ function windows_command.powershell(script, arguments)
       values[index] = powershell_literal(value)
     end
     script = "& { param(" .. table.concat(parameters, ",") .. ") " ..
-      "$ErrorActionPreference='Stop'; " .. script .. " } " ..
+      preamble .. script .. " } " ..
       table.concat(values, " ")
   else
-    script = "$ErrorActionPreference='Stop'; " .. script
+    script = preamble .. script
   end
   return {
     "powershell", "-NoProfile", "-NonInteractive", "-Command", script
