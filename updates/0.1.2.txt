@@ -1,0 +1,4 @@
+- Fixed "Reveal in File Manager" failing on Windows when the media path contains spaces.
+- Fixed the image-track viewer (album art / attached pictures) writing its cache to the wrong location on Windows instead of mpv's cache directory.
+- Fixed the auto-updater's temporary download/extraction files being placed at the Windows drive root, where they could fail to write due to permissions.
+- Fixed non-ASCII text getting mangled on Windows when pasting the clipboard, using the text-input dialog, or falling back to PowerShell for HTTP requests.
