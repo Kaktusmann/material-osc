@@ -1,0 +1,3 @@
+- Added a script-binding to open the context menu from `input.conf`, and `context_menu_right_click` to free up right-click for mpv or other scripts while keeping the context menu available via keyboard or a custom binding.
+- Split `single_click_actions_enabled` into `single_click_pause_enabled` and `single_click_seek_enabled`, so single-click pause and edge seeking can be toggled independently.
+- Fixed the persistent pause indicator being hard to see on bright backgrounds by giving it a faint dark backing and cross-fading it in as the pause/play pop fades out.
