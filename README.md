@@ -32,6 +32,7 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `dpi_scale` | `auto` | `auto` or `0.5`–`4` | Uses the display scale automatically or applies a fixed UI scale. |
 | `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
+| `context_menu_right_click` | `yes` | `yes`, `no` | Opens the context menu on right-click. Set to `no` to free up right-click for mpv or other scripts (for example, `MBTN_RIGHT cycle pause` in `input.conf`) while keeping the context menu available via `MENU`, `Shift+F10`, or a custom keybind. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
 | `pause_indicator` | `yes` | `yes`, `no` | Keeps a faint, transparent pause icon centered on the video for as long as playback stays paused. |
@@ -40,6 +41,13 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `screenshot_button` | `yes` | `yes`, `no` | Shows or hides the screenshot button in the playback controls. |
 | `pip_button` | `yes` | `yes`, `no` | Shows or hides the Picture-in-Picture button in the playback controls. |
 | `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
+
+The context menu opens on right-click, `MENU`, and `Shift+F10` by default. To
+open it with another button, bind it in `input.conf`:
+
+```conf
+MBTN_MID script-binding material_osc/material-osc-open-context-menu
+```
 
 ##### Window controls
 

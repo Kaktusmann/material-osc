@@ -1067,6 +1067,7 @@ end
 runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
   context_menu_enabled = function() return opts.context_menu end,
+  context_menu_right_click_enabled = function() return opts.context_menu_right_click end,
   menu_keyboard = menu_keyboard,
   playback_indicator = playback_indicator,
   live_edge = live_edge,
@@ -1293,6 +1294,9 @@ options_update_handler = function(changed)
   if changed.context_menu then
     if not opts.context_menu then close_context_menu() end
     runtime_host:set_context_menu_enabled(opts.context_menu)
+  end
+  if changed.context_menu_right_click then
+    runtime_host:set_context_menu_right_click_enabled(opts.context_menu_right_click)
   end
   if changed.force_hwdec or changed.force_display_resample or
     changed.force_force_window or changed.force_geometry then
