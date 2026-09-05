@@ -470,6 +470,13 @@ local function create_app(services)
     end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
+    -- Once the pause/play pop finishes fading, keep a faint icon on screen
+    -- for as long as playback stays paused.
+    if opts.pause_indicator and state.snapshot.paused and
+      state.playback_indicator.opacity.value <= 0.001 then
+      services.ui.draw_icon(ass, root.x + root.w / 2, root.y + root.h / 2,
+        "pause", "#FFFFFF", 96, services.ui.alpha(0.4), true)
+    end
     self.edge_seek:draw(ass, root)
     ui.draw_node(self.media_information_close, ass, root)
     if state.pip.active and state.controller.opacity.value > 0 then

@@ -25,6 +25,7 @@ function controls.new(services)
   local toggle_subtitles, cycle_subtitle = navigation.toggle_subtitles, navigation.cycle_subtitle
   local tooltip_delay, tooltip_slide_distance = config.tooltip_delay, config.tooltip_slide_distance
   local max_volume_percentage = config.max_volume_percentage
+  local volume_slider_horizontal = config.opts.volume_slider_orientation == "horizontal"
   local default_text_font = ui.default_text_font
   local Modifier, Rect = ui.Modifier, ui.Rect
   local apply_modifier_size, measure_node = ui.apply_modifier_size, ui.measure_node
@@ -99,13 +100,22 @@ function controls.new(services)
       progress = 0,
       track_y1 = 0,
       track_y2 = 0,
+      track_x1 = 0,
+      track_x2 = 0,
       modifier = Modifier():fillMaxWidth():fillMaxHeight()
     }
 
     local function set_from_mouse()
-      local track_length = node.track_y2 - node.track_y1
-      if track_length <= 0 then return end
-      local value = clamp((node.track_y2 - pointer.y) / track_length, 0, 1)
+      local value
+      if volume_slider_horizontal then
+        local track_length = node.track_x2 - node.track_x1
+        if track_length <= 0 then return end
+        value = clamp((pointer.x - node.track_x1) / track_length, 0, 1)
+      else
+        local track_length = node.track_y2 - node.track_y1
+        if track_length <= 0 then return end
+        value = clamp((node.track_y2 - pointer.y) / track_length, 0, 1)
+      end
       mp.set_property_number("volume", value * node.max_volume_percentage)
     end
 
@@ -142,7 +152,7 @@ function controls.new(services)
       return apply_modifier_size(self.modifier, {w = 0, h = 0}, parent)
     end
 
-    function node:draw(ass, bounds)
+    local function draw_vertical(self, ass, bounds)
       local track_x = bounds.x + bounds.w / 2
       self.track_y1 = bounds.y + dp(18)
       self.track_y2 = bounds.y2 - dp(10)
@@ -186,10 +196,63 @@ function controls.new(services)
            handle_h / 2, active_color, active_alpha)
     end
 
+    local function draw_horizontal(self, ass, bounds)
+      local track_y = bounds.y + bounds.h / 2
+      self.track_x1 = bounds.x + dp(10)
+      self.track_x2 = bounds.x2 - dp(14)
+      local track_length = self.track_x2 - self.track_x1
+      if track_length <= dp(2) then return end
+
+      local fade_progress = smooth_step(clamp(self.progress, 0, 1))
+      local inactive_alpha = ass_alpha_for_opacity(fade_progress * 0.4)
+      local active_alpha = ass_alpha_for_opacity(fade_progress)
+      local track_h = dp(4)
+      local handle_x = self.track_x1 +
+        track_length * self.volume / self.max_volume_percentage
+      local normal_limit_x = self.track_x1 +
+        track_length * 100 / self.max_volume_percentage
+      local boosted = self.volume > 100
+      local active_color = boosted and "#FF9800" or "#FFFFFF"
+      local handle_h_cross = dp(24)
+      local handle_w = volume_state.dragging and dp(2) or dp(4)
+      local handle_gap = dp(4)
+      local active_end_x = handle_x - handle_w / 2 - handle_gap
+
+      draw_rect(ass, handle_x + handle_w / 2 + handle_gap, track_y - track_h / 2,
+            self.track_x2, track_y + track_h / 2,
+            "#FFFFFF", inactive_alpha)
+
+      if boosted then
+        draw_rect(ass, normal_limit_x, track_y - track_h / 2,
+              active_end_x, track_y + track_h / 2,
+              "#FF9800", active_alpha)
+        draw_rect(ass, self.track_x1, track_y - track_h / 2,
+              normal_limit_x, track_y + track_h / 2,
+              "#FFFFFF", active_alpha)
+      else
+        draw_rect(ass, self.track_x1, track_y - track_h / 2,
+              active_end_x, track_y + track_h / 2,
+              "#FFFFFF", active_alpha)
+      end
+
+      draw_box(ass, handle_x - handle_w / 2, track_y - handle_h_cross / 2,
+           handle_x + handle_w / 2, track_y + handle_h_cross / 2,
+           handle_w / 2, active_color, active_alpha)
+    end
+
+    function node:draw(ass, bounds)
+      if volume_slider_horizontal then
+        draw_horizontal(self, ass, bounds)
+      else
+        draw_vertical(self, ass, bounds)
+      end
+    end
+
     return node
   end
 
   local function VolumeControl()
+    local horizontal_expand_w = dp(120)
     local node = {modifier = Modifier():drawBehindInteraction(false)}
     node.guard = {
       modifier = Modifier():pointerArea({
@@ -237,7 +300,12 @@ function controls.new(services)
       self.slider:update(snapshot, volume_state.animation.value)
     end
 
-    function node:measure(parent) return self.button:measure(parent) end
+    function node:measure(parent)
+      local button_size = self.button:measure(parent)
+      if not volume_slider_horizontal then return button_size end
+      local progress = clamp(volume_state.animation.value, 0, 1)
+      return {w = button_size.w + horizontal_expand_w * progress, h = button_size.h}
+    end
 
     function node:draw(ass, bounds)
       self.bounds = bounds
@@ -251,6 +319,24 @@ function controls.new(services)
         return
       end
       if not is_render_pass("dynamic") then return end
+
+      if volume_slider_horizontal then
+        volume_state.popup_bounds = bounds
+        local button_size = measure_node(self.button, bounds)
+        local slider_w = math.max(0, bounds.w - button_size.w)
+        local popup_alpha = mouse_in(bounds) and "00" or "58"
+        draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+          bounds.h / 2, "#050708", popup_alpha)
+        if slider_w > dp(2) then
+          draw_node(self.slider, ass, Rect({
+            x = bounds.x + button_size.w, y = bounds.y,
+            w = slider_w, h = bounds.h
+          }))
+        end
+        draw_node(self.button, ass, bounds)
+        return
+      end
+
       local popup_w = dp(42)
       local expanded_h = dp(142) + bounds.h + dp(4)
       local popup_x1 = bounds.x + bounds.w / 2 - popup_w / 2

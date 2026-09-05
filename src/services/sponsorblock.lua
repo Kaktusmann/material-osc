@@ -2,7 +2,7 @@ local sponsorblock = {}
 
 local SERVER = "https://sponsor.ajay.app"
 local USER_AGENT =
-  "material-osc/1.0 (https://github.com/brahmkshatriya/material-osc)"
+  "material-osc/1.0 (https://github.com/Kaktusmann/material-osc)"
 local SUBMISSION_CATEGORIES = {
   "sponsor", "intro", "outro", "interaction", "selfpromo", "preview",
   "hook", "music_offtopic", "filler"

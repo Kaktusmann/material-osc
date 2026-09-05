@@ -6,10 +6,13 @@ function playback_indicator.new(args)
   local service = {}
 
   function service:show(icon, label, now, label_color)
+    local already_visible = not state.pill_only and state.opacity.value > 0.01
     state.icon, state.label = icon, label
     state.label_color = label_color or "#FFFFFF"
     state.pill_only, state.show_on_empty = false, false
-    state.opacity:snap(0); state.scale:snap(0.8)
+    if not already_visible then
+      state.opacity:snap(0); state.scale:snap(0.8)
+    end
     state.scale:set_target(1); state.opacity:set_target(1, now, 0.09)
     timers:after(state, "hide_timer", 0.28, function()
       state.opacity:set_target(0, mp.get_time(), 0.20)
