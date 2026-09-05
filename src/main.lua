@@ -470,12 +470,20 @@ local function create_app(services)
     end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
-    -- Once the pause/play pop finishes fading, keep a faint icon on screen
-    -- for as long as playback stays paused.
+    -- Cross-fade into a faint icon as the pause/play pop fades out, so it
+    -- stays on screen for as long as playback stays paused. Tracking the
+    -- pop's own opacity (instead of waiting for it to hit zero) avoids a
+    -- visible gap between the pop disappearing and this one appearing.
+    local persistent_fade = 1 - state.playback_indicator.opacity.value
     if opts.pause_indicator and state.snapshot.paused and
-      state.playback_indicator.opacity.value <= 0.001 then
-      services.ui.draw_icon(ass, root.x + root.w / 2, root.y + root.h / 2,
-        "pause", "#FFFFFF", 96, services.ui.alpha(0.4), true)
+      persistent_fade > 0.001 then
+      local cx, cy = root.x + root.w / 2, root.y + root.h / 2
+      local size = ui.dp(110)
+      services.ui.draw_box(ass, cx - size / 2, cy - size / 2,
+        cx + size / 2, cy + size / 2, size / 2,
+        "#050708", services.ui.alpha(0.32 * persistent_fade), true)
+      services.ui.draw_icon(ass, cx, cy, "pause", "#FFFFFF", 96,
+        services.ui.alpha(0.55 * persistent_fade), true)
     end
     self.edge_seek:draw(ass, root)
     ui.draw_node(self.media_information_close, ass, root)
