@@ -32,6 +32,7 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `dpi_scale` | `auto` | `auto` or `0.5`–`4` | Uses the display scale automatically or applies a fixed UI scale. |
 | `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
+| `context_menu_right_click` | `yes` | `yes`, `no` | Opens the context menu on right-click. Set to `no` to free up right-click for mpv or other scripts (for example, `MBTN_RIGHT cycle pause` in `input.conf`) while keeping the context menu available via `MENU`, `Shift+F10`, or a custom keybind. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
 | `pause_indicator` | `yes` | `yes`, `no` | Keeps a faint, transparent pause icon centered on the video for as long as playback stays paused. |
@@ -40,6 +41,13 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `screenshot_button` | `yes` | `yes`, `no` | Shows or hides the screenshot button in the playback controls. |
 | `pip_button` | `yes` | `yes`, `no` | Shows or hides the Picture-in-Picture button in the playback controls. |
 | `window_controls` | `auto` | `auto`, `yes`, `no` | Shows window controls automatically for borderless and fullscreen windows, always, or never. |
+
+The context menu opens on right-click, `MENU`, and `Shift+F10` by default. To
+open it with another button, bind it in `input.conf`:
+
+```conf
+MBTN_MID script-binding material_osc/material-osc-open-context-menu
+```
 
 ##### Window controls
 
@@ -61,7 +69,8 @@ height, with width calculated from the video's aspect ratio; see
 | --- | --- | --- | --- |
 | `mouse_timeout` | `2` | Seconds; `0` disables timeout | Controls how long the UI remains visible after pointer activity. |
 | `show_on_mouse_move` | `no` | `yes`, `no` | With `yes`, movement anywhere reveals the UI. With `no`, use the bottom edge for playback controls or the top edge for window controls. |
-| `single_click_actions_enabled` | `yes` | `yes`, `no` | Enables single-click play/pause and left/right edge seeking. Double-click fullscreen remains available when disabled. |
+| `single_click_pause_enabled` | `yes` | `yes`, `no` | Enables single-click play/pause on the video surface. Double-click fullscreen remains available when disabled. |
+| `single_click_seek_enabled` | `yes` | `yes`, `no` | Enables left/right edge seeking on single click. |
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
 | `live_edge_offset_seconds` | `2` | Non-negative seconds or `-1` | After a live stream resumes from pausing or buffering, seeks this far behind the live edge. Set to `-1` to disable automatic catch-up. |

@@ -36,6 +36,7 @@ local definitions = {
   {name = "dpi_scale", default = "auto", group = "appearance"},
   {name = "accent_color", default = "#00bbff", group = "appearance"},
   {name = "context_menu", default = true, group = "appearance"},
+  {name = "context_menu_right_click", default = true, group = "appearance"},
   {name = "tooltip", default = true, group = "appearance"},
   {name = "show_mini_seekbar", default = false, group = "appearance"},
   {name = "pause_indicator", default = true, group = "appearance"},
@@ -49,7 +50,8 @@ local definitions = {
 
   {name = "mouse_timeout", default = 2, group = "behavior"},
   {name = "show_on_mouse_move", default = false, group = "behavior"},
-  {name = "single_click_actions_enabled", default = true, group = "behavior"},
+  {name = "single_click_pause_enabled", default = true, group = "behavior"},
+  {name = "single_click_seek_enabled", default = true, group = "behavior"},
   {name = "seeking_zone_percentage", default = 15, group = "behavior",
     normalize = number({default = 15, min = 0, max = 50})},
   {name = "seek_step_seconds", default = 5, group = "behavior"},

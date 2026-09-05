@@ -470,12 +470,20 @@ local function create_app(services)
     end
     if state.snapshot.buffering then services.loading.draw(ass) end
     services.playback_indicator:draw(ass, root)
-    -- Once the pause/play pop finishes fading, keep a faint icon on screen
-    -- for as long as playback stays paused.
+    -- Cross-fade into a faint icon as the pause/play pop fades out, so it
+    -- stays on screen for as long as playback stays paused. Tracking the
+    -- pop's own opacity (instead of waiting for it to hit zero) avoids a
+    -- visible gap between the pop disappearing and this one appearing.
+    local persistent_fade = 1 - state.playback_indicator.opacity.value
     if opts.pause_indicator and state.snapshot.paused and
-      state.playback_indicator.opacity.value <= 0.001 then
-      services.ui.draw_icon(ass, root.x + root.w / 2, root.y + root.h / 2,
-        "pause", "#FFFFFF", 96, services.ui.alpha(0.4), true)
+      persistent_fade > 0.001 then
+      local cx, cy = root.x + root.w / 2, root.y + root.h / 2
+      local size = ui.dp(110)
+      services.ui.draw_box(ass, cx - size / 2, cy - size / 2,
+        cx + size / 2, cy + size / 2, size / 2,
+        "#050708", services.ui.alpha(0.32 * persistent_fade), true)
+      services.ui.draw_icon(ass, cx, cy, "pause", "#FFFFFF", 96,
+        services.ui.alpha(0.55 * persistent_fade), true)
     end
     self.edge_seek:draw(ass, root)
     ui.draw_node(self.media_information_close, ass, root)
@@ -1037,8 +1045,8 @@ local animation_coordinator = animation_coordinator_module.new({
   show_window_controls_with_controller = function()
     return opts.show_on_mouse_move
   end,
-  single_click_actions_enabled = function()
-    return opts.single_click_actions_enabled
+  single_click_seek_enabled = function()
+    return opts.single_click_seek_enabled
   end,
   seeking_zone_fraction = function()
     return opts.seeking_zone_percentage / 100
@@ -1059,6 +1067,7 @@ end
 runtime_host = mpv_runtime_module.new({
   state = runtime, mp = mp, navigation = navigation,
   context_menu_enabled = function() return opts.context_menu end,
+  context_menu_right_click_enabled = function() return opts.context_menu_right_click end,
   menu_keyboard = menu_keyboard,
   playback_indicator = playback_indicator,
   live_edge = live_edge,
@@ -1286,6 +1295,9 @@ options_update_handler = function(changed)
     if not opts.context_menu then close_context_menu() end
     runtime_host:set_context_menu_enabled(opts.context_menu)
   end
+  if changed.context_menu_right_click then
+    runtime_host:set_context_menu_right_click_enabled(opts.context_menu_right_click)
+  end
   if changed.force_hwdec or changed.force_display_resample or
     changed.force_force_window or changed.force_geometry then
     apply_forced_mpv_options()
@@ -1301,9 +1313,9 @@ options_update_handler = function(changed)
     changed.skip_outro_detection_texts then
     sponsorblock_service:on_options_changed(changed)
   end
-  if changed.dpi_scale or changed.single_click_actions_enabled or
-    changed.seeking_zone_percentage or changed.seek_step_seconds or
-    changed.max_volume_percentage then
+  if changed.dpi_scale or changed.single_click_pause_enabled or
+    changed.single_click_seek_enabled or changed.seeking_zone_percentage or
+    changed.seek_step_seconds or changed.max_volume_percentage then
     recreate_app()
   end
   if changed.show_on_mouse_move then

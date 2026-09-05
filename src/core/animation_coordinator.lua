@@ -148,7 +148,7 @@ function animation_coordinator.new(args)
     local edge_modal = modal or runtime.subtitle.open or runtime.audio.open or
       runtime.subtitle.animation:is_running() or runtime.audio.animation:is_running()
     local edge_allowed = playback_available and
-      args.single_click_actions_enabled() and
+      args.single_click_seek_enabled() and
       not runtime.controller.pointer_timed_out and
       not edge_modal and not over_controller and
       pointer.x >= 0 and pointer.y >= args.edge_seek_top_inset()

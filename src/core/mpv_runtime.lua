@@ -8,6 +8,7 @@ function mpv_runtime.new(args)
     original_cursor_autohide = nil,
     cursor_autohide = nil,
     context_menu_enabled = nil,
+    context_menu_right_click_enabled = nil,
     mouse_areas = {}
   }
 
@@ -30,19 +31,33 @@ function mpv_runtime.new(args)
     mp.set_property("cursor-autohide", value)
   end
 
+  function service:update_context_menu_mouse_binding()
+    if self.context_menu_enabled and self.context_menu_right_click_enabled then
+      mp.enable_key_bindings(context_menu_mouse_binding,
+        "allow-hide-cursor+allow-vo-dragging")
+    else
+      mp.disable_key_bindings(context_menu_mouse_binding)
+    end
+  end
+
   function service:set_context_menu_enabled(enabled)
     enabled = not not enabled
     if self.context_menu_enabled == enabled then return end
     self.context_menu_enabled = enabled
     if enabled then
-      mp.enable_key_bindings(context_menu_mouse_binding,
-        "allow-hide-cursor+allow-vo-dragging")
       mp.enable_key_bindings(context_menu_keyboard_binding,
         "allow-hide-cursor+allow-vo-dragging")
     else
-      mp.disable_key_bindings(context_menu_mouse_binding)
       mp.disable_key_bindings(context_menu_keyboard_binding)
     end
+    self:update_context_menu_mouse_binding()
+  end
+
+  function service:set_context_menu_right_click_enabled(enabled)
+    enabled = not not enabled
+    if self.context_menu_right_click_enabled == enabled then return end
+    self.context_menu_right_click_enabled = enabled
+    self:update_context_menu_mouse_binding()
   end
 
   function service:update_mouse_area()
@@ -327,7 +342,11 @@ function mpv_runtime.new(args)
       {"MENU", open_context_menu_from_keyboard},
       {"Shift+F10", open_context_menu_from_keyboard}
     }, context_menu_keyboard_binding)
+    mp.add_key_binding(nil, "material-osc-open-context-menu",
+      open_context_menu_from_keyboard)
     self.context_menu_enabled = nil
+    self.context_menu_right_click_enabled = nil
+    self:set_context_menu_right_click_enabled(args.context_menu_right_click_enabled())
     self:set_context_menu_enabled(args.context_menu_enabled())
     mp.set_key_bindings(menu_bindings(args.close_context_menu),
       "material-osc-context-menu", "force")
