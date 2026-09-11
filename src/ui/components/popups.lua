@@ -797,6 +797,107 @@ end
     return node
   end
 
+  local audio_normalize_label = "material-osc-normalize"
+
+  local audio_channel_options = {
+    {name = "Auto", value = "auto-safe"},
+    {name = "Stereo", value = "stereo"},
+    {name = "Mono", value = "mono"}
+  }
+
+  local function set_audio_normalize(node, enabled)
+    if enabled == node.normalize then return end
+    if enabled then
+      mp.commandv("change-list", "af", "append",
+        "@" .. audio_normalize_label .. ":lavfi=[dynaudnorm]")
+    else
+      mp.commandv("change-list", "af", "remove", "@" .. audio_normalize_label)
+    end
+  end
+
+  local function AudioStylePopup(on_back)
+    local node = {
+      width = dp(380), height = dp(244), interactive = false,
+      panel_alpha = "00", text_alpha = "00", secondary_alpha = "00",
+      hover_alpha = "00", delay_value = 0, channels = "auto-safe",
+      normalize = false, pitch_correction = true,
+      modifier = Modifier():clickable({
+        name = "audio-style-panel", enabled = false, on_click = function() end
+      })
+    }
+    local function reset_audio_style()
+      mp.set_property_number("audio-delay", 0)
+      mp.set_property("audio-channels", "auto-safe")
+      set_audio_normalize(node, false)
+      mp.set_property_native("audio-pitch-correction", true)
+    end
+    node.header = ChapterHeader(on_back, "Audio Settings", "arrow_back", {
+      name = "audio-style-reset",
+      icon = "restart_alt",
+      tooltip = "Reset Audio Settings",
+      on_click = reset_audio_style
+    })
+    node.delay = SubtitleAdjustRow("audio-delay", "Timing",
+      function()
+        mp.set_property_number("audio-delay", clamp(node.delay_value - 0.1, -10, 10))
+      end,
+      function()
+        mp.set_property_number("audio-delay", clamp(node.delay_value + 0.1, -10, 10))
+      end)
+    node.channels_row = SubtitleAdjustRow("audio-channels", "Channels",
+      function()
+        local item = cycle_option(audio_channel_options, node.channels, -1,
+          function(v) return v.value end)
+        mp.set_property("audio-channels", item.value)
+      end,
+      function()
+        local item = cycle_option(audio_channel_options, node.channels, 1,
+          function(v) return v.value end)
+        mp.set_property("audio-channels", item.value)
+      end)
+    node.normalize_row = SubtitleAdjustRow("audio-normalize", "Normalize",
+      function() set_audio_normalize(node, false) end,
+      function() set_audio_normalize(node, true) end)
+    node.pitch_row = SubtitleAdjustRow("audio-pitch-correction", "Pitch correction",
+      function() mp.set_property_native("audio-pitch-correction", false) end,
+      function() mp.set_property_native("audio-pitch-correction", true) end)
+    function node:update(props)
+      update_fields(self, props)
+      self.modifier.fixed_width, self.modifier.fixed_height = self.width, self.height
+      self.modifier.pointer_enabled = self.interactive
+      self.header:update({alpha = self.text_alpha, hover_alpha = self.hover_alpha,
+        interactive = self.interactive})
+      local common = {interactive = self.interactive, text_alpha = self.text_alpha,
+        secondary_alpha = self.secondary_alpha, hover_alpha = self.hover_alpha}
+      common.value = string.format("%+.1fs", self.delay_value); self.delay:update(common)
+      local channel_name = self.channels
+      for _, item in ipairs(audio_channel_options) do
+        if item.value == self.channels then channel_name = item.name break end
+      end
+      common.value = channel_name; self.channels_row:update(common)
+      common.value = self.normalize and "On" or "Off"
+      self.normalize_row:update(common)
+      common.value = self.pitch_correction and "On" or "Off"
+      self.pitch_row:update(common)
+    end
+    function node:measure(parent)
+      return apply_modifier_size(self.modifier, {w = self.width, h = self.height}, parent)
+    end
+    function node:draw(ass, bounds)
+      draw_box(ass, bounds.x, bounds.y, bounds.x2, bounds.y2,
+        dp(30), "#050708", self.panel_alpha)
+      draw_node(self.header, ass, Rect({x = bounds.x, y = bounds.y, w = bounds.w, h = dp(56)}))
+      local rows = {self.delay, self.channels_row, self.normalize_row, self.pitch_row}
+      local y = bounds.y + dp(60)
+      for _, row in ipairs(rows) do
+        draw_node(row, ass, Rect({x = bounds.x + dp(8), y = y,
+          w = bounds.w - dp(16), h = dp(44)}))
+        y = y + dp(44)
+      end
+    end
+    return node
+  end
+
   local crop_presets = {
     {label = "Original", value = "", mode = "original"},
     {label = "Stretch", value = "stretch", mode = "stretch"},
@@ -1232,6 +1333,12 @@ end
     })
     node.audio = TrackPopup(function() set_settings_page("root") end, {
       name = "settings-audio", title = "Audio", action_icon = "arrow_back",
+      right_action = {
+        name = "settings-audio-style",
+        icon = "tune",
+        tooltip = "Audio Settings",
+        on_click = function() set_settings_page("audio_style") end
+      },
       state = settings_state,
       on_select = function(item)
         if item.id == 0 then mp.set_property("aid", "no")
@@ -1295,6 +1402,7 @@ end
     })
     node.speed = SpeedPopup(function() set_settings_page("root") end)
     node.subtitle_style = SubtitleStylePopup(function() set_settings_page("subtitles") end)
+    node.audio_style = AudioStylePopup(function() set_settings_page("audio") end)
     node.video_settings = VideoSettingsPopup(function()
       set_settings_page("video")
     end)
@@ -1404,6 +1512,12 @@ end
         page_props.color = self.subtitle_color
         page_props.font = self.subtitle_font
         self.subtitle_style:update(page_props)
+      elseif settings_state.page == "audio_style" then
+        page_props.delay_value = self.audio_delay
+        page_props.channels = self.audio_channels
+        page_props.normalize = self.audio_normalize
+        page_props.pitch_correction = self.audio_pitch_correction
+        self.audio_style:update(page_props)
       elseif settings_state.page == "video_settings" then
         page_props.crop = self.video_crop_value
         page_props.keepaspect = self.video_keepaspect
@@ -1443,6 +1557,9 @@ end
       if settings_state.page == "speed" then page = self.speed end
       if settings_state.page == "subtitle_style" then
         page = self.subtitle_style
+      end
+      if settings_state.page == "audio_style" then
+        page = self.audio_style
       end
       if settings_state.page == "video_settings" then
         page = self.video_settings
@@ -1576,7 +1693,8 @@ end
         local desired_w = wide_page and dp(420) or
           ((settings_state.page == "video_crop" or
               settings_state.page == "video_aspect") and dp(400) or
-            (settings_state.page == "video_settings" and dp(380) or dp(320)))
+            ((settings_state.page == "video_settings" or
+                settings_state.page == "audio_style") and dp(380) or dp(320)))
         local target_w = math.max(dp(300), math.min(desired_w, viewport.w - dp(24)))
         local item_count = 0
         if settings_state.page == "video" then item_count = #video_items
@@ -1595,6 +1713,7 @@ end
           desired_h = dp(308)
         elseif settings_state.page == "speed" then desired_h = dp(190)
         elseif settings_state.page == "subtitle_style" then desired_h = dp(288)
+        elseif settings_state.page == "audio_style" then desired_h = dp(244)
         elseif settings_state.page == "video_settings" then desired_h = dp(332)
         elseif settings_state.page == "video_crop" or
           settings_state.page == "video_aspect" then desired_h = dp(164)
@@ -1666,6 +1785,10 @@ end
         props.subtitle_border_size = snapshot.subtitle_border_size or 1.65
         props.subtitle_color = snapshot.subtitle_color or "#FFFFFFFF"
         props.subtitle_font = snapshot.subtitle_font or "sans-serif"
+        props.audio_delay = snapshot.audio_delay or 0
+        props.audio_channels = snapshot.audio_channels or "auto-safe"
+        props.audio_normalize = snapshot.audio_normalize == true
+        props.audio_pitch_correction = snapshot.audio_pitch_correction ~= false
         props.video_crop_value = snapshot.video_crop or ""
         props.video_aspect_override = snapshot.video_aspect_override or "no"
         props.video_keepaspect = snapshot.video_keepaspect ~= false

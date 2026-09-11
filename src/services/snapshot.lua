@@ -42,6 +42,13 @@ function snapshot.reader(deps)
     return value == nil and default or value
   end
 
+  local function audio_normalize_active(af_list)
+    for _, filter in ipairs(af_list or {}) do
+      if filter.label == "material-osc-normalize" then return true end
+    end
+    return false
+  end
+
   return function()
     local duration = property_number("duration", 0) or 0
     local position = property_number("time-pos", 0) or 0
@@ -271,6 +278,10 @@ function snapshot.reader(deps)
       subtitle_border_size = property_number("sub-outline-size", 1.65) or 1.65,
       subtitle_color = property("sub-color", "#FFFFFFFF") or "#FFFFFFFF",
       subtitle_font = property("sub-font", "sans-serif") or "sans-serif",
+      audio_delay = property_number("audio-delay", 0) or 0,
+      audio_channels = property("audio-channels", "auto-safe") or "auto-safe",
+      audio_normalize = audio_normalize_active(property_native("af", {})),
+      audio_pitch_correction = property_native("audio-pitch-correction") ~= false,
       video_crop = property("video-crop", "") or "",
       video_aspect_override = property("video-aspect-override", "no") or "no",
       video_keepaspect = property_native("keepaspect") ~= false,
