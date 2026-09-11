@@ -120,6 +120,16 @@ dash. An empty list disables detection for that chapter type.
 </details>
 
 <details>
+<summary>History</summary>
+
+| Option | Default | Accepted values | Description |
+| --- | --- | --- | --- |
+| `history_enabled` | `yes` | `yes`, `no` | Records played files in the History page of the Settings menu, so they can be reopened later. |
+| `history_max_entries` | `50` | A number from `1` to `500` | Sets how many recently played files are kept. |
+
+</details>
+
+<details>
 <summary>YouTube</summary>
 
 | Option | Default | Accepted values | Description |
