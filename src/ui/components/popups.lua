@@ -1313,6 +1313,8 @@ end
       function() set_settings_page("video_crop") end)
     node.speed_row = SettingsActionRow("settings-speed-row", "speed",
       function() set_settings_page("speed") end)
+    node.history_row = SettingsActionRow("settings-history-row", "history",
+      function() set_settings_page("history") end)
     node.video = TrackPopup(function() set_settings_page("root") end, {
       name = "settings-video", title = "Video", action_icon = "arrow_back",
       right_action = {
@@ -1431,6 +1433,22 @@ end
         return false
       end
     })
+    node.history = TrackPopup(function() set_settings_page("root") end, {
+      name = "settings-history", title = "History", action_icon = "arrow_back",
+      state = settings_state,
+      right_action = {
+        name = "settings-history-clear", icon = "delete_sweep",
+        tooltip = "Clear History",
+        on_click = function() services.history:clear() end
+      },
+      is_selected = function() return false end,
+      on_action = function(item)
+        services.history:remove(item.id)
+      end,
+      on_select = function(item)
+        mp.commandv("loadfile", item.path, "replace")
+      end
+    })
     function node:update(props)
       update_fields(self, props)
       if self.video_keepaspect == false then
@@ -1472,6 +1490,12 @@ end
       self.crop_row:update(common)
       common.label, common.value = "Playback Speed", string.format("%gx", self.speed_value)
       self.speed_row:update(common)
+      local history_count = services.history:count()
+      common.label = "History"
+      common.value = history_count > 0 and
+        (tostring(history_count) .. (history_count == 1 and " entry" or " entries")) or
+        "Empty"
+      self.history_row:update(common)
       local page_props = {
         interactive = self.interactive, panel_alpha = self.panel_alpha,
         text_alpha = self.text_alpha, secondary_alpha = self.secondary_alpha,
@@ -1538,6 +1562,9 @@ end
       elseif settings_state.page == "video_shaders" then
         page_props.items = self.shader_items
         self.video_shaders:update(page_props)
+      elseif settings_state.page == "history" then
+        page_props.items = services.history:items()
+        self.history:update(page_props)
       end
     end
     function node:measure(parent)
@@ -1573,6 +1600,9 @@ end
       if settings_state.page == "video_shaders" then
         page = self.video_shaders
       end
+      if settings_state.page == "history" then
+        page = self.history
+      end
       if page then
         push_clip(bounds)
         page:draw(ass, bounds)
@@ -1589,6 +1619,7 @@ end
       rows[#rows + 1] = self.subtitle_row
       rows[#rows + 1] = self.crop_row
       rows[#rows + 1] = self.speed_row
+      rows[#rows + 1] = self.history_row
       for _, row in ipairs(rows) do
         draw_node(row, ass, Rect({x = bounds.x + dp(8), y = y,
           w = bounds.w - dp(16), h = dp(44)}))
@@ -1707,17 +1738,20 @@ end
           item_count = #ytdl_state.caption_items
         elseif settings_state.page == "video_shaders" then
           item_count = #(snapshot.shader_items or {})
+        elseif settings_state.page == "history" then
+          item_count = services.history:count()
         end
         local desired_h
         if settings_state.page == "root" then
-          desired_h = dp(308)
+          desired_h = dp(356)
         elseif settings_state.page == "speed" then desired_h = dp(190)
         elseif settings_state.page == "subtitle_style" then desired_h = dp(288)
         elseif settings_state.page == "audio_style" then desired_h = dp(244)
         elseif settings_state.page == "video_settings" then desired_h = dp(332)
         elseif settings_state.page == "video_crop" or
           settings_state.page == "video_aspect" then desired_h = dp(164)
-        elseif settings_state.page == "video_shaders" and item_count == 0 then
+        elseif (settings_state.page == "video_shaders" or
+            settings_state.page == "history") and item_count == 0 then
           desired_h = dp(116)
         else
           local has_footer = settings_state.page == "subtitles" or
@@ -1731,7 +1765,8 @@ end
           settings_state.page == "subtitles" or
           settings_state.page == "secondary_subtitles" or
           settings_state.page == "auto_captions" or
-          settings_state.page == "video_shaders" then
+          settings_state.page == "video_shaders" or
+          settings_state.page == "history" then
           local whole_rows = math.max(1, math.floor((max_h - dp(68)) / dp(48)))
           max_h = dp(68) + whole_rows * dp(48)
         end

@@ -154,6 +154,7 @@ function mpv_runtime.new(args)
     args.stream_quality:restore_subtitles()
     if args.sponsorblock then args.sponsorblock:load() end
     args.bookmarks:restore()
+    args.history:record()
     args.render()
   end
 

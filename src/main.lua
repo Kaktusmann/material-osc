@@ -84,6 +84,7 @@ local subtitle_loader_module = require "src.services.subtitle_loader"
 local shader_loader_module = require "src.services.shader_loader"
 local thumbnail_module = require "src.services.thumbnail_service"
 local bookmark_service_module = require "src.services.bookmark_service"
+local history_service_module = require "src.services.history_service"
 local easter_egg_collection_module =
   require "src.services.easter_egg_collection"
 local context_actions_module = require "src.services.context_actions"
@@ -724,8 +725,16 @@ local function open_context_menu(x, y)
   if render then render() end
 end
 
+local history_service = history_service_module.new({
+  mp = mp, persistence = persistence,
+  enabled = function() return opts.history_enabled end,
+  max_entries = function() return opts.history_max_entries end,
+  render = function(...) return render(...) end
+})
+
 menu_keyboard = menu_keyboard_module.new({
   runtime = runtime,
+  history = history_service,
   render = function() if render then render() end end
 })
 
@@ -931,6 +940,7 @@ local services = {
   timers = timers,
   updater = updater,
   bookmarks = bookmark_service,
+  history = history_service,
   easter_eggs = easter_egg_collection,
   context_actions = context_actions,
   sponsorblock = sponsorblock_service,
@@ -1075,6 +1085,7 @@ runtime_host = mpv_runtime_module.new({
   sponsorblock = sponsorblock_service,
   directory_playlist = directory_playlist,
   bookmarks = bookmark_service,
+  history = history_service,
   temporary_speed = temporary_speed,
   close_context_menu = close_context_menu,
   open_context_menu = open_context_menu,
