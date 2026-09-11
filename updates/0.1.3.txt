@@ -1,0 +1,3 @@
+- Added an audio settings popup for adjusting delay, channel layout, volume normalization, and pitch correction.
+- Added a History page to the Settings menu that records recently played files and lets you reopen, remove, or clear entries.
+- Added audio track channel count to the track selector.
