@@ -87,6 +87,10 @@ local definitions = {
   {name = "directory_playlist_sort", default = "name", group = "playlist",
     normalize = enum("name", {"name", "newest", "oldest"})},
 
+  {name = "history_enabled", default = true, group = "history"},
+  {name = "history_max_entries", default = 50, group = "history",
+    normalize = number({default = 50, min = 1, max = 500})},
+
   {name = "youtube_quality", default = "auto", group = "youtube",
     normalize = function(value)
       local height = tostring(value or "auto"):lower():match("^(%d+)p?$")

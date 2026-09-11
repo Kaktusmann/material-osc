@@ -112,6 +112,7 @@ function menu_keyboard.new(args)
       return #(runtime.ytdl.caption_items or {})
     end
     if page == "video_shaders" then return #(snapshot.shader_items or {}) end
+    if page == "history" then return args.history and args.history:count() or 0 end
     return 0
   end
 
