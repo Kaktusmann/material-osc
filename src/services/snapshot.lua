@@ -148,6 +148,10 @@ function snapshot.reader(deps)
             math.floor(bitrate / 1000 + 0.5))
         end
       else
+        local channel_count = tonumber(track["demux-channel-count"])
+        if channel_count and channel_count > 0 then
+          details[#details + 1] = channel_count .. "ch"
+        end
         if bitrate and bitrate > 0 then
           details[#details + 1] = string.format("%d Kbps",
             math.floor(bitrate / 1000 + 0.5))
