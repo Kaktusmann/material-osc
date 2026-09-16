@@ -70,6 +70,25 @@ local function is_local(path)
     path:match("^[%a][%w+.-]*://") == nil
 end
 
+local function decode_percent(value)
+  return (value:gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end))
+end
+
+local function query_filename(path)
+  local query = path:match("%?(.*)$")
+  if not query then return nil end
+  for key, value in query:gmatch("([^&=]+)=([^&]*)") do
+    if key == "filename" then return decode_percent((value:gsub("+", " "))) end
+  end
+  return nil
+end
+
+local function path_filename(path)
+  local without_query = path:match("^([^?#]*)")
+  local name = (without_query or path):match("([^/\\]+)$")
+  return name ~= "" and decode_percent(name) or nil
+end
+
 local function copy(values)
   local result = {}
   for index, value in ipairs(values) do result[index] = value end
@@ -115,9 +134,17 @@ function media_title.new(args)
 
   function service:load()
     local path = mp.get_property("path", "") or ""
-    if not is_local(path) then return end
+    if path == "" or path == "-" then return end
     local forced = mp.get_property("force-media-title", "") or ""
     if forced:match("%S") then return end
+
+    if not is_local(path) then
+      local filename = query_filename(path) or path_filename(path)
+      if not filename then return end
+      mp.set_property("file-local-options/force-media-title", filename)
+      return
+    end
+
     local filename = mp.get_property("filename", "") or ""
     if filename == "" then filename = path:match("([^/\\]+)$") or path end
     local title = media_title.format(guess(filename))
