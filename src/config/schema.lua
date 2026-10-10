@@ -52,6 +52,7 @@ local definitions = {
   {name = "show_on_mouse_move", default = false, group = "behavior"},
   {name = "single_click_pause_enabled", default = true, group = "behavior"},
   {name = "single_click_seek_enabled", default = true, group = "behavior"},
+  {name = "seekbar_scroll_seek_enabled", default = true, group = "behavior"},
   {name = "seeking_zone_percentage", default = 15, group = "behavior",
     normalize = number({default = 15, min = 0, max = 50})},
   {name = "seek_step_seconds", default = 5, group = "behavior"},
