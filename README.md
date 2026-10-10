@@ -15,6 +15,28 @@ directory playlists and much more.
 
 I would say, you should fuck around and find out!
 
+## What this fork adds
+
+Beyond the original project, this fork adds:
+
+**Features**
+- Playback history page in the Settings menu
+- Audio settings popup (delay, channels, normalize, pitch)
+- Audio track channel count shown in the track selector
+- Persistent transparent pause indicator
+- Optional horizontal volume slider
+- Custom context menu keybinds, with the option to disable right-click
+- Split single-click pause and edge-seek toggles
+
+**Fixes**
+- Streaming media titles derived from the URL filename instead of token junk
+- Windows cache/temp path and PowerShell console encoding bugs
+- "Reveal in file manager" failing on Windows paths with spaces
+- Volume indicator flashing during rapid changes
+- Pause indicator visibility on bright backgrounds
+
+See the [Releases](https://github.com/Kaktusmann/material-osc/releases) page for the full changelog.
+
 ## Showcase
 
 https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
@@ -24,6 +46,8 @@ https://github.com/user-attachments/assets/65046da7-7d9e-4492-9e93-47650b8fc484
 material-osc can be customized with a `material-osc.conf` file in mpv's
 `script-opts` directory. You can also open file from **Right-click → Configurations**.
 
+🍴 marks options added by this fork.
+
 <details>
 <summary>Appearance and controls</summary>
 
@@ -32,11 +56,11 @@ material-osc can be customized with a `material-osc.conf` file in mpv's
 | `dpi_scale` | `auto` | `auto` or `0.5`–`4` | Uses the display scale automatically or applies a fixed UI scale. |
 | `accent_color` | `"#00bbff"` | Quoted six-digit RGB color | Sets the seekbar, selections, toggles, and other highlighted elements. |
 | `context_menu` | `yes` | `yes`, `no` | Enables the material-osc context menu. When disabled, right-click and menu-key bindings remain available to mpv and other scripts. |
-| `context_menu_right_click` | `yes` | `yes`, `no` | Opens the context menu on right-click. Set to `no` to free up right-click for mpv or other scripts (for example, `MBTN_RIGHT cycle pause` in `input.conf`) while keeping the context menu available via `MENU`, `Shift+F10`, or a custom keybind. |
+| `context_menu_right_click` 🍴 | `yes` | `yes`, `no` | Opens the context menu on right-click. Set to `no` to free up right-click for mpv or other scripts (for example, `MBTN_RIGHT cycle pause` in `input.conf`) while keeping the context menu available via `MENU`, `Shift+F10`, or a custom keybind. |
 | `tooltip` | `yes` | `yes`, `no` | Enables tooltips for controls. |
 | `show_mini_seekbar` | `no` | `yes`, `no` | Keeps a 1dp playback-progress line at the bottom while the main controls are hidden. |
-| `pause_indicator` | `yes` | `yes`, `no` | Keeps a faint, transparent pause icon centered on the video for as long as playback stays paused. |
-| `volume_slider_orientation` | `vertical` | `vertical`, `horizontal` | Expands the volume slider upward from the volume button, or rightward alongside it (pushing later controls out of the way). |
+| `pause_indicator` 🍴 | `yes` | `yes`, `no` | Keeps a faint, transparent pause icon centered on the video for as long as playback stays paused. |
+| `volume_slider_orientation` 🍴 | `vertical` | `vertical`, `horizontal` | Expands the volume slider upward from the volume button, or rightward alongside it (pushing later controls out of the way). |
 | `show_empty_screen` | `yes` | `yes`, `no` | Shows the material-osc welcome screen when the playlist is empty. Set to `no` to leave the empty player unobstructed. |
 | `screenshot_button` | `yes` | `yes`, `no` | Shows or hides the screenshot button in the playback controls. |
 | `pip_button` | `yes` | `yes`, `no` | Shows or hides the Picture-in-Picture button in the playback controls. |
@@ -69,9 +93,9 @@ height, with width calculated from the video's aspect ratio; see
 | --- | --- | --- | --- |
 | `mouse_timeout` | `2` | Seconds; `0` disables timeout | Controls how long the UI remains visible after pointer activity. |
 | `show_on_mouse_move` | `no` | `yes`, `no` | With `yes`, movement anywhere reveals the UI. With `no`, use the bottom edge for playback controls or the top edge for window controls. |
-| `single_click_pause_enabled` | `yes` | `yes`, `no` | Enables single-click play/pause on the video surface. Double-click fullscreen remains available when disabled. |
-| `single_click_seek_enabled` | `yes` | `yes`, `no` | Enables left/right edge seeking on single click. |
-| `seekbar_scroll_seek_enabled` | `yes` | `yes`, `no` | Enables seeking by scrolling while hovering over the timeline. |
+| `single_click_pause_enabled` 🍴 | `yes` | `yes`, `no` | Enables single-click play/pause on the video surface. Double-click fullscreen remains available when disabled. |
+| `single_click_seek_enabled` 🍴 | `yes` | `yes`, `no` | Enables left/right edge seeking on single click. |
+| `seekbar_scroll_seek_enabled` 🍴 | `yes` | `yes`, `no` | Enables seeking by scrolling while hovering over the timeline. |
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
 | `live_edge_offset_seconds` | `2` | Non-negative seconds or `-1` | After a live stream resumes from pausing or buffering, seeks this far behind the live edge. Set to `-1` to disable automatic catch-up. |
@@ -121,7 +145,7 @@ dash. An empty list disables detection for that chapter type.
 </details>
 
 <details>
-<summary>History</summary>
+<summary>History 🍴</summary>
 
 | Option | Default | Accepted values | Description |
 | --- | --- | --- | --- |
