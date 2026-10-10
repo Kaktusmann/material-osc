@@ -1,0 +1,1 @@
+- Added `seekbar_scroll_seek_enabled` to let scroll-to-seek on the timeline be disabled independently of other seek methods.

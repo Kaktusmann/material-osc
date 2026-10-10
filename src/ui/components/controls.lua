@@ -404,8 +404,10 @@ function controls.new(services)
         seek_state.position = nil
         seek_state.offset_x = 0
       end,
-      on_scroll_up = function() mp.commandv("seek", "5", "relative") end,
-      on_scroll_down = function() mp.commandv("seek", "-5", "relative") end
+      on_scroll_up = config.opts.seekbar_scroll_seek_enabled and
+        function() mp.commandv("seek", "5", "relative") end or nil,
+      on_scroll_down = config.opts.seekbar_scroll_seek_enabled and
+        function() mp.commandv("seek", "-5", "relative") end or nil
     })
 
     function node:measure(parent)
