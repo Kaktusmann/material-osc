@@ -1,0 +1,1 @@
+- Added `touch_mode` for touchscreens: a tap that looks like touch first reveals the UI instead of hitting invisible buttons, and the UI hides after `mouse_timeout` once the finger is lifted. Mouse behavior is unchanged.
