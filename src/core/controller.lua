@@ -27,6 +27,7 @@ function controller.new(args)
       runtime.controller.opacity.value > 0.001 or
       runtime.controller.opacity:is_running()
     runtime.controller.visible = visible
+    if not visible then runtime.volume.touch_open = nil end
     if visible then
       runtime.controller.hide_cursor_after_fade = false
       args.set_cursor_autohide("no")
@@ -309,6 +310,7 @@ function controller.new(args)
     self:update_mouse()
     if touch and runtime.controller.opacity.value < 0.9 and
       not runtime.context_menu.open and not self:interaction_requires_visibility() then
+      runtime.volume.touch_open = true
       self:show()
       return
     end
