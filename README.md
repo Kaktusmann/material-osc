@@ -96,6 +96,7 @@ height, with width calculated from the video's aspect ratio; see
 | `single_click_pause_enabled` 🍴 | `yes` | `yes`, `no` | Enables single-click play/pause on the video surface. Double-click fullscreen remains available when disabled. |
 | `single_click_seek_enabled` 🍴 | `yes` | `yes`, `no` | Enables left/right edge seeking on single click. |
 | `seekbar_scroll_seek_enabled` 🍴 | `yes` | `yes`, `no` | Enables seeking by scrolling while hovering over the timeline. |
+| `touch_mode` 🍴 | `no` | `yes`, `no` | For touchscreens. Presses that look like taps (no hover beforehand) only reveal the UI first, and the UI hides after `mouse_timeout` once the finger is lifted. Normal mouse clicks behave as usual. |
 | `seeking_zone_percentage` | `15` | `0`–`50` | Sets each fast-seek zone's width as a percentage of the window. |
 | `seek_step_seconds` | `5` | Seconds; minimum `1` | Sets how far edge clicks and edge scrolling seek backward or forward. |
 | `live_edge_offset_seconds` | `2` | Non-negative seconds or `-1` | After a live stream resumes from pausing or buffering, seeks this far behind the live edge. Set to `-1` to disable automatic catch-up. |

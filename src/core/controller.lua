@@ -5,6 +5,10 @@ function controller.new(args)
   local service = {}
 
   function service:update_mouse()
+    if runtime.pointer.touch_released then
+      runtime.pointer.x, runtime.pointer.y = -1, -1
+      return
+    end
     local x, y = mp.get_mouse_pos()
     runtime.pointer.x, runtime.pointer.y = x or -1, y or -1
   end
@@ -230,7 +234,32 @@ function controller.new(args)
     end
   end
 
+  function service:track_raw_move()
+    local pointer, now = runtime.pointer, mp.get_time()
+    if now - (pointer.last_raw_move or -math.huge) > 0.3 then
+      pointer.move_streak = 0
+      pointer.streak_from_x, pointer.streak_from_y = pointer.raw_x, pointer.raw_y
+    end
+    pointer.move_streak = pointer.move_streak + 1
+    pointer.last_raw_move = now
+    pointer.raw_x, pointer.raw_y = mp.get_mouse_pos()
+  end
+
+  function service:press_is_touch()
+    local pointer = runtime.pointer
+    if pointer.touch_released then return true end
+    if not pointer.last_raw_move or mp.get_time() - pointer.last_raw_move > 0.1 or
+      pointer.move_streak > 2 then
+      return false
+    end
+    local from_x, from_y = pointer.streak_from_x, pointer.streak_from_y
+    return not from_x or not pointer.raw_x or
+      math.abs(pointer.raw_x - from_x) + math.abs(pointer.raw_y - from_y) > 24
+  end
+
   function service:on_mouse_move()
+    runtime.pointer.touch_released = nil
+    if opts.touch_mode then self:track_raw_move() end
     runtime.input.keyboard_focus, runtime.input.keyboard_scope = nil, nil
     self:update_mouse()
     local interval = args.pointer_interval and args.pointer_interval() or
@@ -273,8 +302,16 @@ function controller.new(args)
   end
 
   function service:on_primary_down()
+    local touch = opts.touch_mode and self:press_is_touch()
+    runtime.pointer.touch_press = touch
+    runtime.pointer.touch_released = nil
     runtime.controller.pointer_timed_out = false
     self:update_mouse()
+    if touch and runtime.controller.opacity.value < 0.9 and
+      not runtime.context_menu.open and not self:interaction_requires_visibility() then
+      self:show()
+      return
+    end
     self:update_window_controls_hover()
     local _, box = args.hitbox_at_cursor()
     if box and box.on_press then
@@ -328,6 +365,14 @@ function controller.new(args)
     runtime.playlist.dragging_scroll = false
     runtime.seek.position, runtime.seek.offset_x = nil, 0
     self:sync_visibility_with_pointer()
+    if not runtime.pointer.touch_press then return end
+    runtime.pointer.touch_press = false
+    runtime.pointer.touch_released = true
+    args.thumbnail:clear()
+    self:update_mouse()
+    self:pointer_visual_feedback_changed()
+    self:show()
+    args.render()
   end
 
   function service:on_primary_button(event)
