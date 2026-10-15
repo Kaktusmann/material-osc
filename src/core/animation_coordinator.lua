@@ -194,7 +194,8 @@ function animation_coordinator.new(args)
     local wants_volume = playback_available and not modal and
       (runtime.volume.dragging or
       (not runtime.controller.pointer_timed_out and
-        ((runtime.volume.button_bounds and
+        (runtime.volume.touch_open or
+        (runtime.volume.button_bounds and
           args.mouse_in(runtime.volume.button_bounds)) or
           (runtime.volume.popup_bounds and
             args.mouse_in(runtime.volume.popup_bounds)))))

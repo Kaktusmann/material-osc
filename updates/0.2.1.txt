@@ -1,0 +1,1 @@
+- `touch_mode` now opens the volume slider together with the UI when a tap reveals it.
